@@ -1,0 +1,4 @@
+# ninja log v5
+2	18208	1658247077063231694	/data/kpusteln/Swin-Transformer/kernels/window_process/build/temp.linux-x86_64-cpython-37/swin_window_process.o	9978a70a92848673
+113	28498	1658251395627927591	/data/kpusteln/Swin-Transformer/kernels/window_process/build/temp.linux-x86_64-cpython-37/swin_window_process.o	dd66c8b8848b9e56
+113	37523	1658251404723733936	/data/kpusteln/Swin-Transformer/kernels/window_process/build/temp.linux-x86_64-cpython-37/swin_window_process_kernel.o	f590abc5135d1670
