@@ -11,7 +11,7 @@ import comet_ml
 
 experiment = comet_ml.Experiment(
     api_key="3YfcpxE1bYPCpkkg4pQ2OjQ2r",
-    project_name="Fetal swin Regresja"
+    project_name="Fetal swin cls"
 )
 
 # Metrics from this training run will now be
@@ -312,7 +312,7 @@ def validate(config, data_loader, model):
         if config.MODEL.TASK_TYPE == 'cls':
             loss_cls = criterion_cls(output, target)
         if config.MODEL.TASK_TYPE == 'reg':
-            loss_reg = criterion_reg(output, target)
+            loss_reg = criterion_reg(output, scores)
             
         if config.MODEL.TASK_TYPE == 'cls':
             acc1, _ = accuracy(output, target, topk=(1, 5))
