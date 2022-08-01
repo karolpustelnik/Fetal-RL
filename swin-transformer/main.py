@@ -350,17 +350,22 @@ def validate(config, data_loader, model):
                 f'recall {recall_meter.val:.3f} ({recall_meter.avg:.3f})\t'
                 f'precision {precision_meter.val:.3f} ({precision_meter.avg:.3f})\t'
                 f'Mem {memory_used:.0f}MB')
-    logger.info(f' * Acc@1 {acc1_meter.avg:.3f}')
-    logger.info(f' * f@1_score {f1_score_meter.avg:.3f}')
-    logger.info(f' * recall {recall_meter.avg:.3f}')
-    logger.info(f' * precision {precision_meter.avg:.3f}')
-    
-    ## comet ml logging
-    experiment.log_metric('test_accuracy', acc1_meter.avg)
-    experiment.log_metric('test_f1_score', f1_score_meter.avg)
-    experiment.log_metric('test_recall', recall_meter.avg)
-    experiment.log_metric('test_precision', precision_meter.avg)
-    experiment.log_metric('test_loss_cls', loss_meter_cls.avg)
+        logger.info(f' * Acc@1 {acc1_meter.avg:.3f}')
+        logger.info(f' * f@1_score {f1_score_meter.avg:.3f}')
+        logger.info(f' * recall {recall_meter.avg:.3f}')
+        logger.info(f' * precision {precision_meter.avg:.3f}')
+        
+        ## comet ml logging
+        experiment.log_metric('test_accuracy', acc1_meter.avg)
+        experiment.log_metric('test_f1_score', f1_score_meter.avg)
+        experiment.log_metric('test_recall', recall_meter.avg)
+        experiment.log_metric('test_precision', precision_meter.avg)
+        experiment.log_metric('test_loss_cls', loss_meter_cls.avg)
+        experiment.log_metric('test_loss_reg', loss_meter_reg.avg)
+        experiment.log_image((images[0]).squeeze(0).cpu(), name=None, overwrite=False, image_format="png",
+        image_scale=1.0, image_shape=None, image_colormap=None,
+        image_minmax=None, image_channels="first", copy_to_tmp=True, step=None)
+        experiment.log_confusion_matrix(target.cpu(), output.cpu())
 
     return acc1_meter.avg, f1_score_meter.avg, recall_meter.avg, precision_meter.avg, loss_meter_cls.avg, loss_meter_reg.avg
 
