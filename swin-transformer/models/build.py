@@ -16,6 +16,7 @@ def build_model(config):
                                 in_chans=config.MODEL.SWIN.IN_CHANS,
                                 num_classes=config.MODEL.NUM_CLASSES,
                                 embed_dim=config.MODEL.SWIN.EMBED_DIM,
+                                task_type=config.MODEL.TASK_TYPE,
                                 depths=config.MODEL.SWIN.DEPTHS,
                                 num_heads=config.MODEL.SWIN.NUM_HEADS,
                                 window_size=config.MODEL.SWIN.WINDOW_SIZE,

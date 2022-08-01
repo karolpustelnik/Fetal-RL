@@ -11,7 +11,7 @@ import comet_ml
 
 experiment = comet_ml.Experiment(
     api_key="3YfcpxE1bYPCpkkg4pQ2OjQ2r",
-    project_name="<Fetal classification swin-transformer>"
+    project_name="Fetal swin Regresja"
 )
 
 # Metrics from this training run will now be
@@ -121,7 +121,6 @@ def main(config):
         # smoothing is handled with mixup label transform
         print(f'{config.AUG.MIXUP} ##########################################################################')
         criterion_cls = SoftTargetCrossEntropy()
-        #criterion_cls = SoftTargetCrossEntropy()
         criterion_reg = torch.nn.MSELoss()
     elif config.MODEL.LABEL_SMOOTHING > 0.:
         print(f'{config.MODEL.LABEL_SMOOTHING} ##########################################################################')
@@ -148,21 +147,25 @@ def main(config):
 
     if config.MODEL.RESUME:
         max_accuracy = load_checkpoint(config, model_without_ddp, optimizer, lr_scheduler, loss_scaler, logger)
-        acc1, f1_score, recall, precision,  loss_cls = validate(config, data_loader_val, model)
-        logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
-        logger.info(f"f1 score of the network on the {len(dataset_val)} test images: {f1_score*100}%")
-        #logger.info(f"auc_score of the network on the {len(dataset_val)} test images: {auc_score:.1f}%")
-        logger.info(f"recall of the network on the {len(dataset_val)} test images: {recall*100}%")
-        logger.info(f"precision of the network on the {len(dataset_val)} test images: {precision*100}%")
+        acc1, f1_score, recall, precision,  loss_cls, loss_reg = validate(config, data_loader_val, model)
+        if config.MODEL.TASK_TYPE == 'cls':
+            logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
+            logger.info(f"f1 score of the network on the {len(dataset_val)} test images: {f1_score*100}%")
+            logger.info(f"recall of the network on the {len(dataset_val)} test images: {recall*100}%")
+            logger.info(f"precision of the network on the {len(dataset_val)} test images: {precision*100}%")
+            logger.info(f"Loss of the network on the {len(dataset_val)} test images: {loss_cls:.4f}")
+            max_accuracy = max(max_accuracy, acc1)
+            logger.info(f'Max accuracy: {max_accuracy:.2f}%')
+        if config.MODEL.TASK_TYPE == 'reg':
+            logger.info(f"Loss of the network on the {len(dataset_val)} test images: {loss_reg:.4f}")
         if config.EVAL_MODE:
             return
 
     if config.MODEL.PRETRAINED and (not config.MODEL.RESUME):
         load_pretrained(config, model_without_ddp, logger)
-        acc1, f1_score, recall, precision,  loss_cls = validate(config, data_loader_val, model)
+        acc1, f1_score, recall, precision,  loss_cls, loss_reg = validate(config, data_loader_val, model)
         logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
         logger.info(f"f1 score of the network on the {len(dataset_val)} test images: {f1_score*100}%")
-        #logger.info(f"auc_score of the network on the {len(dataset_val)} test images: {auc_score:.1f}%")
         logger.info(f"recall of the network on the {len(dataset_val)} test images: {recall*100}%")
         logger.info(f"precision of the network on the {len(dataset_val)} test images: {precision*100}%")
 
@@ -181,14 +184,18 @@ def main(config):
             save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, loss_scaler,
                             logger)
 
-        acc1, f1_score, recall, precision,  loss_cls = validate(config, data_loader_val, model)
-        logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
-        logger.info(f"f1 score of the network on the {len(dataset_val)} test images: {f1_score*100}%")
-        #logger.info(f"auc_score of the network on the {len(dataset_val)} test images: {auc_score:.1f}%")
-        logger.info(f"recall of the network on the {len(dataset_val)} test images: {recall*100}%")
-        logger.info(f"precision of the network on the {len(dataset_val)} test images: {precision*100}%")
-        max_accuracy = max(max_accuracy, acc1)
-        logger.info(f'Max accuracy: {max_accuracy:.2f}%')
+        acc1, f1_score, recall, precision,  loss_cls, loss_reg = validate(config, data_loader_val, model)
+        if config.MODEL.TASK_TYPE == 'cls':
+            logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
+            logger.info(f"f1 score of the network on the {len(dataset_val)} test images: {f1_score*100}%")
+            logger.info(f"recall of the network on the {len(dataset_val)} test images: {recall*100}%")
+            logger.info(f"precision of the network on the {len(dataset_val)} test images: {precision*100}%")
+            logger.info(f"Loss of the network on the {len(dataset_val)} test images: {loss_cls:.4f}")
+            max_accuracy = max(max_accuracy, acc1)
+            logger.info(f'Max accuracy: {max_accuracy:.2f}%')
+        if config.MODEL.TASK_TYPE == 'reg':
+            logger.info(f"Loss of the network on the {len(dataset_val)} test images: {loss_reg:.4f}")
+
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -218,12 +225,18 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
 
         with torch.cuda.amp.autocast(enabled=config.AMP_ENABLE):
             outputs = model(samples)
-        loss_cls = criterion_cls(outputs[0], targets) ## changed
-        #loss_reg = criterion_reg(outputs[1], scores) ## changed
-        loss_cls = loss_cls / config.TRAIN.ACCUMULATION_STEPS
-        #loss_reg = loss_reg / config.TRAIN.ACCUMULATION_STEPS
-        loss = loss_cls #+ loss_reg ## changed
+        if config.MODEL.TASK_TYPE == 'cls':
+            loss_cls = criterion_cls(outputs, targets) ## changed
+            loss = loss_cls
+        if config.MODEL.TASK_TYPE == 'reg':
+            loss_reg = criterion_reg(outputs, scores)
+            loss = loss_reg
+        if config.MODEL.TASK_TYPE == 'cls_reg':
+            loss_cls = criterion_cls(outputs[0], targets)
+            loss_reg = criterion_reg(outputs[1], scores)
+            loss = loss_cls + loss_reg
         # this attribute is added by timm on one optimizer (adahessian)
+        
         is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
         grad_norm = loss_scaler(loss, optimizer, clip_grad=config.TRAIN.CLIP_GRAD,
                                 parameters=model.parameters(), create_graph=is_second_order,
@@ -234,9 +247,10 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
         loss_scale_value = loss_scaler.state_dict()["scale"]
 
         torch.cuda.synchronize()
-
-        loss_meter_cls.update(loss_cls.item(), targets.size(0))
-        #loss_meter_reg.update(loss_reg.item(), scores.size(0))
+        if config.MODEL.TASK_TYPE == 'cls':
+            loss_meter_cls.update(loss_cls.item(), targets.size(0))
+        if config.MODEL.TASK_TYPE == 'reg':
+            loss_meter_reg.update(loss_reg.item(), targets.size(0))
         if grad_norm is not None:  # loss_scaler return None if not update
             norm_meter.update(grad_norm)
         scaler_meter.update(loss_scale_value)
@@ -253,7 +267,7 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
                 f'eta {datetime.timedelta(seconds=int(etas))} lr {lr:.6f}\t wd {wd:.4f}\t'
                 f'time {batch_time.val:.4f} ({batch_time.avg:.4f})\t'
                 f'cls loss {loss_meter_cls.val:.4f} ({loss_meter_cls.avg:.4f})\t'
-                #f'reg loss {loss_meter_reg.val:.4f} ({loss_meter_reg.avg:.4f})\t'
+                f'reg loss {loss_meter_reg.val:.4f} ({loss_meter_reg.avg:.4f})\t'
                 f'grad_norm {norm_meter.val:.4f} ({norm_meter.avg:.4f})\t'
                 f'loss_scale {scaler_meter.val:.4f} ({scaler_meter.avg:.4f})\t'
                 f'mem {memory_used:.0f}MB')
@@ -261,7 +275,9 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
             experiment.log_metric("lr", lr)
             experiment.log_metric("wd", wd)
             experiment.log_metric("grad_norm", norm_meter.avg)
-            experiment.log_metric("loss_scale", scaler_meter.avg)
+            experiment.log_metric("cls loss", loss_meter_cls.avg)
+            experiment.log_metric("reg loss", loss_meter_reg.avg)
+            
     epoch_time = time.time() - start
     
     # comet ml logging
@@ -281,7 +297,6 @@ def validate(config, data_loader, model):
     precision_meter = AverageMeter()
     recall_meter = AverageMeter()
     f1_score_meter = AverageMeter()
-    #auc_meter = AverageMeter()
 
     end = time.time()
     for idx, (images, target, scores) in enumerate(data_loader): ## changed
@@ -294,28 +309,30 @@ def validate(config, data_loader, model):
             output = model(images)
 
         # measure accuracy and record loss
-        loss_cls = criterion_cls(output[0], target) ## changed
-        #loss_reg = criterion_reg(output[1], scores)## changed
-        acc1, _ = accuracy(output[0], target, topk=(1, 5))
-        precision, recall = precision_recall(output[0], target, average = 'macro', num_classes = 7)
-        f1 = f1_score(output[0], target, average = 'macro', num_classes = 7)
-        
-        #auc_score = auc(output[0], target, reorder = True)
-        acc1 = reduce_tensor(acc1)
-        f1 = reduce_tensor(f1)
-        #auc_score = reduce_tensor(auc_score)
-        precision = reduce_tensor(precision)
-        recall = reduce_tensor(recall)
-        loss_cls = reduce_tensor(loss_cls) ## changed
-        #loss_reg = reduce_tensor(loss_reg) ## changed
+        if config.MODEL.TASK_TYPE == 'cls':
+            loss_cls = criterion_cls(output, target)
+        if config.MODEL.TASK_TYPE == 'reg':
+            loss_reg = criterion_reg(output, target)
+            
+        if config.MODEL.TASK_TYPE == 'cls':
+            acc1, _ = accuracy(output, target, topk=(1, 5))
+            precision, recall = precision_recall(output, target, average = 'macro', num_classes = 7)
+            f1 = f1_score(output, target, average = 'macro', num_classes = 7)
+            acc1 = reduce_tensor(acc1)
+            f1 = reduce_tensor(f1)
+            precision = reduce_tensor(precision)
+            recall = reduce_tensor(recall)
+            loss_cls = reduce_tensor(loss_cls)
+            loss_meter_cls.update(loss_cls.item(), target.size(0))
+            acc1_meter.update(acc1.item(), target.size(0))
+            precision_meter.update(precision.item(), target.size(0))
+            recall_meter.update(recall.item(), target.size(0))
+            f1_score_meter.update(f1.item(), target.size(0))
+            
+        if config.MODEL.TASK_TYPE == 'reg':
+            loss_reg = reduce_tensor(loss_reg)
+            loss_meter_reg.update(loss_reg.item(), target.size(0))
 
-        loss_meter_cls.update(loss_cls.item(), target.size(0))
-        #loss_meter_reg.update(loss_reg.item(), target.size(0))
-        acc1_meter.update(acc1.item(), target.size(0))
-        precision_meter.update(precision.item(), target.size(0))
-        recall_meter.update(recall.item(), target.size(0))
-        f1_score_meter.update(f1.item(), target.size(0))
-        #auc_meter.update(auc_score.item(), target.size(0))
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -327,16 +344,14 @@ def validate(config, data_loader, model):
                 f'Test: [{idx}/{len(data_loader)}]\t'
                 f'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                 f'cls Loss {loss_meter_cls.val:.4f} ({loss_meter_cls.avg:.4f})\t'
-                #f'reg Loss {loss_meter_reg.val:.4f} ({loss_meter_reg.avg:.4f})\t'
+                f'reg Loss {loss_meter_reg.val:.4f} ({loss_meter_reg.avg:.4f})\t'
                 f'Acc@1 {acc1_meter.val:.3f} ({acc1_meter.avg:.3f})\t'
                 f'f@1_score {f1_score_meter.val:.3f} ({f1_score_meter.avg:.3f})\t'
-                #f'auc {auc_meter.val:.3f} ({auc_meter.avg:.3f})\t'
                 f'recall {recall_meter.val:.3f} ({recall_meter.avg:.3f})\t'
                 f'precision {precision_meter.val:.3f} ({precision_meter.avg:.3f})\t'
                 f'Mem {memory_used:.0f}MB')
     logger.info(f' * Acc@1 {acc1_meter.avg:.3f}')
     logger.info(f' * f@1_score {f1_score_meter.avg:.3f}')
-    #logger.info(f' * auc {auc_meter.avg:.3f}')
     logger.info(f' * recall {recall_meter.avg:.3f}')
     logger.info(f' * precision {precision_meter.avg:.3f}')
     
@@ -347,7 +362,7 @@ def validate(config, data_loader, model):
     experiment.log_metric('test_precision', precision_meter.avg)
     experiment.log_metric('test_loss_cls', loss_meter_cls.avg)
 
-    return acc1_meter.avg, f1_score_meter.avg, recall_meter.avg, precision_meter.avg, loss_meter_cls.avg
+    return acc1_meter.avg, f1_score_meter.avg, recall_meter.avg, precision_meter.avg, loss_meter_cls.avg, loss_meter_reg.avg
 
 
 @torch.no_grad()

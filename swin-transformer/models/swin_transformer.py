@@ -195,7 +195,7 @@ class SwinTransformerBlock(nn.Module):
     def __init__(self, dim, input_resolution, num_heads, window_size=7, shift_size=0,
                  mlp_ratio=4., qkv_bias=True, qk_scale=None, drop=0., attn_drop=0., drop_path=0.,
                  act_layer=nn.GELU, norm_layer=nn.LayerNorm,
-                 fused_window_process=False):
+                 fused_window_process=False, classfication = False):
         super().__init__()
         self.dim = dim
         self.input_resolution = input_resolution
@@ -510,7 +510,7 @@ class SwinTransformer(nn.Module):
     """
 
     def __init__(self, img_size=224, patch_size=4, in_chans=3, num_classes=1000,
-                 embed_dim=96, depths=[2, 2, 6, 2], num_heads=[3, 6, 12, 24],
+                 embed_dim=96, task_type = 'cls', depths=[2, 2, 6, 2], num_heads=[3, 6, 12, 24],
                  window_size=7, mlp_ratio=4., qkv_bias=True, qk_scale=None,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
                  norm_layer=nn.LayerNorm, ape=False, patch_norm=True,
@@ -524,6 +524,7 @@ class SwinTransformer(nn.Module):
         self.patch_norm = patch_norm
         self.num_features = int(embed_dim * 2 ** (self.num_layers - 1))
         self.mlp_ratio = mlp_ratio
+        self.task_type = task_type
 
         # split image into non-overlapping patches
         self.patch_embed = PatchEmbed(
@@ -564,8 +565,10 @@ class SwinTransformer(nn.Module):
 
         self.norm = norm_layer(self.num_features)
         self.avgpool = nn.AdaptiveAvgPool1d(1)
-        self.cls_head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity() ## changed
-        #self.reg_head = nn.Linear(self.num_features, 1)  ## changed
+        if self.task_type == 'cls':
+            self.cls_head = nn.Linear(self.num_features, num_classes)
+        if self.task_type == 'reg':
+            self.reg_head = nn.Linear(self.num_features, 1)
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
@@ -600,11 +603,15 @@ class SwinTransformer(nn.Module):
         return x
 
     def forward(self, x):
-        x = self.forward_features(x)
-        x_cls = self.cls_head(x) ## changed
-        #x_score = self.reg_head(x) ## changed
-        #x_score = x_score.squeeze(1)
-        return x_cls, 1
+        if self.task_type == 'cls':
+            x = self.forward_features(x)
+            x = self.cls_head(x)
+            return x
+        if self.task_type == 'reg':
+            x = self.forward_features(x)
+            x = self.reg_head(x)
+            x_score = x.squeeze(1)
+            return x_score
 
     def flops(self):
         flops = 0
