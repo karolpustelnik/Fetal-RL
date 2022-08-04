@@ -106,14 +106,14 @@ def dist_mean_ssmi(sharpest_franes_dict_path, labels_path, ssmi_data_path):
         values.extend(column)
     df = pd.DataFrame({'index': idxs, 'score': values})
     data_ssmi_dist = pd.merge(data_ssmi_dist, df, on = 'index')
-    labels_corrected = pd.read_csv('labels_corrected.csv')
+    labels_corrected = pd.read_csv('./outputs/labels_corrected.csv')
     labels_corrected.set_index('index', inplace = True)
     data_ssmi_dist.set_index('index', inplace = True)
     data_ssmi_dist = pd.merge(data_ssmi_dist, labels_corrected, left_index=True, right_index=True)
     data_ssmi_dist['index'] = data_ssmi_dist.index
     score_labels = data_ssmi_dist[['index', 'Class','score', 'video_x']]
-    score_labels.to_csv('score_labels.csv', index = False)
-    data_ssmi_dist.to_csv('data_ssmi_dist.csv', index = False)
+    score_labels.to_csv('./outputs/score_labels.csv', index = False)
+    data_ssmi_dist.to_csv('./outputs/data_ssmi_dist.csv', index = False)
 
 dist_mean_ssmi('sharpest_frames_dict.npy', 'labels_corrected.csv', 'similarity_dict.npy')
         

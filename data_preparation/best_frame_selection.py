@@ -77,6 +77,6 @@ def best_frame_selection(corrected_labels_path, img_path):
         sharpest_frames_dict[text] = frame
         
 
-    np.save("sharpest_frames_dict.npy", sharpest_frames_dict) # saving the dictionary to a numpy file
+    np.save("./outputs/sharpest_frames_dict.npy", sharpest_frames_dict) # saving the dictionary to a numpy file
     
 best_frame_selection('labels_corrected.csv', '/data/kpusteln/fetal/fetal_extracted/')

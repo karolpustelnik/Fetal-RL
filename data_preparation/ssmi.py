@@ -32,6 +32,6 @@ def ssmi(img_path, labels_path, sharpest_frames_path):
                     text_file.write(f'{k}/{261766}')
     with open("status.txt", "w") as text_file:
                     text_file.write(f'{k}/{261766} done')
-    np.save('similarity_dict.npy', similarity_dict)
+    np.save('./outputs/similarity_dict.npy', similarity_dict)
             
 ssmi('/data/kpusteln/fetal/fetal_extracted/', '/data/kpusteln/Fetal-RL/labels_corrected.csv', '/data/kpusteln/Fetal-RL/sharpest_frames_dict.npy')

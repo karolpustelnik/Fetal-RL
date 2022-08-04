@@ -116,11 +116,11 @@ def labels_correction(labels_path):
         if i%10000 == 0:
             print(f'Finished: {int((i/len(labels_good))*100)}%')
         if labels_good.iloc[i][1] == 'Head':
-            labels_good.iloc[i][1] = 0
-        if labels_good.iloc[i][1] == 'Abdomen':
             labels_good.iloc[i][1] = 1
+        if labels_good.iloc[i][1] == 'Abdomen':
+            labels_good.iloc[i][1] = 3
         if labels_good.iloc[i][1] == 'Femur':
-            labels_good.iloc[i][1] = 2
+            labels_good.iloc[i][1] = 5
         if labels_good.iloc[i][1] == 'Head non-standard plane' or labels_good.iloc[i][1] == 'Head non-stendard plane':
             labels_good.iloc[i][1] = 1
             
@@ -144,6 +144,6 @@ def labels_correction(labels_path):
     index_to_drop = labels_good[labels_good['index'] == '63_2_253'].index # w filmikach nie ma klatki 63_2_253, wiec trzeba usunac ten label
     if len(index_to_drop) > 0:
         labels_good = labels_good.drop(index_to_drop)
-    labels_good.to_csv('labels_corrected.csv', index = False) # saving the new labels
+    labels_good.to_csv('./outputs/labels_corrected.csv', index = False) # saving the new labels
 
-labels_correction('/data/kpusteln/Fetal-RL/labele_org.csv')
+labels_correction('/data/kpusteln/Fetal-RL/data_preparation/outputs/labele_org.csv')

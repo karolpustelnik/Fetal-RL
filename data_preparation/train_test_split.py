@@ -22,7 +22,9 @@ def train_test_split(data, train_size = 800, precision = 0.005):
     args: data - data frame containing the data
     train_size - size of the train set default 800 (there are 898 videos)
     precision - determines how close the train set size is to the train_size default 0.005 (the smaller the better, but it may take longer to generate sets)"""
-
+    
+    print('Splitting data into train and test sets...')
+    
     data = pd.read_csv(data) # loading the data
     wass_dist = 1
     videos = list(data['video_x'].unique()) # list of videos
@@ -34,8 +36,10 @@ def train_test_split(data, train_size = 800, precision = 0.005):
         probability_mass_train = probability_mass(train_set['Class']) # calculating the probability mass of the train set
         probability_mass_test = probability_mass(test_set['Class']) # calculating the probability mass of the test set
         wass_dist = scipy.stats.wasserstein_distance(probability_mass_train, probability_mass_test) # wasserstein distance between distributions
-    train_set.to_csv('fetal_extracted_map_train_scr.csv', index = False) # saving the train set
-    test_set.to_csv('fetal_extracted_map_val_scr.csv', index = False) # saving the test set
+    train_set.to_csv('./outputs/fetal_extracted_map_train_scr.csv', index = False) # saving the train set
+    test_set.to_csv('./outputs/fetal_extracted_map_val_scr.csv', index = False) # saving the test set
+    
+    print('Done!')
     return train_set, test_set
     
 def histogram_class_plot(data, title):
@@ -48,8 +52,8 @@ def histogram_class_plot(data, title):
     plt.savefig(title + '.png')
 
 
-train_set, test_set = train_test_split('score_labels.csv', 800)
-histogram_class_plot(train_set, 'Train set distribution')
-histogram_class_plot(test_set, 'Test set distribution')
+train_set, test_set = train_test_split('./outputs/score_labels_4_cls.csv', 800)
+histogram_class_plot(train_set, './outputs/Train set distribution')
+histogram_class_plot(test_set, './outputs/Test set distribution')
 
 

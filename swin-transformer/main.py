@@ -8,11 +8,13 @@
 # just add these two lines at the top of
 # your training script:
 import comet_ml
+import hashlib
 
-experiment = comet_ml.Experiment(
-    api_key="3YfcpxE1bYPCpkkg4pQ2OjQ2r",
-    project_name="Fetal swin cls"
-)
+#experiment = comet_ml.Experiment(
+  # api_key="3YfcpxE1bYPCpkkg4pQ2OjQ2r",
+  #  project_name="Fetal swin reg", auto_output_logging="simple"
+#)
+
 
 # Metrics from this training run will now be
 # available in the Comet UI
@@ -44,7 +46,18 @@ from logger import create_logger
 from utils import load_checkpoint, load_pretrained, save_checkpoint, NativeScalerWithGradNormCount, auto_resume_helper, \
     reduce_tensor
 
+def get_experiment(run_id = 'fetal_simple_cls'):
+    experiment_id = hashlib.sha1(run_id.encode("utf-8")).hexdigest()
+    os.environ["COMET_EXPERIMENT_KEY"] = experiment_id
 
+    api = comet_ml.API('3YfcpxE1bYPCpkkg4pQ2OjQ2r')  # Assumes API key is set in config/env
+    api_experiment = api.get_experiment_by_id(experiment_id)
+
+    if api_experiment is None:
+        return comet_ml.Experiment(api_key ='3YfcpxE1bYPCpkkg4pQ2OjQ2r', project_name = 'Fetal swin simple cls')
+
+    else:
+        return comet_ml.ExistingExperiment(api_key ='3YfcpxE1bYPCpkkg4pQ2OjQ2r', project_name='Fetal swin simple cls')
 
 def parse_option():
     parser = argparse.ArgumentParser('Swin Transformer training and evaluation script', add_help=False)
@@ -93,6 +106,7 @@ def parse_option():
 
 
 def main(config):
+    experiment = get_experiment()
     dataset_train, dataset_val, data_loader_train, data_loader_val, mixup_fn = build_loader(config)
 
     logger.info(f"Creating model:{config.MODEL.TYPE}/{config.MODEL.NAME}")
@@ -106,6 +120,7 @@ def main(config):
         logger.info(f"number of GFLOPs: {flops / 1e9}")
 
     model.cuda()
+    
     model_without_ddp = model
 
     optimizer = build_optimizer(config, model)
@@ -147,7 +162,7 @@ def main(config):
 
     if config.MODEL.RESUME:
         max_accuracy = load_checkpoint(config, model_without_ddp, optimizer, lr_scheduler, loss_scaler, logger)
-        acc1, f1_score, recall, precision,  loss_cls, loss_reg = validate(config, data_loader_val, model)
+        acc1, f1_score, recall, precision,  loss_cls, loss_reg = validate(config, data_loader_val, model, experiment)
         if config.MODEL.TASK_TYPE == 'cls':
             logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
             logger.info(f"f1 score of the network on the {len(dataset_val)} test images: {f1_score*100}%")
@@ -163,7 +178,7 @@ def main(config):
 
     if config.MODEL.PRETRAINED and (not config.MODEL.RESUME):
         load_pretrained(config, model_without_ddp, logger)
-        acc1, f1_score, recall, precision,  loss_cls, loss_reg = validate(config, data_loader_val, model)
+        acc1, f1_score, recall, precision,  loss_cls, loss_reg = validate(config, data_loader_val, model, experiment)
         logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
         logger.info(f"f1 score of the network on the {len(dataset_val)} test images: {f1_score*100}%")
         logger.info(f"recall of the network on the {len(dataset_val)} test images: {recall*100}%")
@@ -179,12 +194,12 @@ def main(config):
         data_loader_train.sampler.set_epoch(epoch)
 
         train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader_train, optimizer, epoch, mixup_fn, lr_scheduler,
-                        loss_scaler)
+                        loss_scaler, experiment)
         if dist.get_rank() == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
             save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, loss_scaler,
                             logger)
 
-        acc1, f1_score, recall, precision,  loss_cls, loss_reg = validate(config, data_loader_val, model)
+        acc1, f1_score, recall, precision,  loss_cls, loss_reg = validate(config, data_loader_val, model, experiment)
         if config.MODEL.TASK_TYPE == 'cls':
             logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
             logger.info(f"f1 score of the network on the {len(dataset_val)} test images: {f1_score*100}%")
@@ -202,7 +217,7 @@ def main(config):
     logger.info('Training time {}'.format(total_time_str))
 
 
-def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, optimizer, epoch, mixup_fn, lr_scheduler, loss_scaler):
+def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, optimizer, epoch, mixup_fn, lr_scheduler, loss_scaler, experiment):
     model.train()
     optimizer.zero_grad()
 
@@ -272,6 +287,7 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
                 f'loss_scale {scaler_meter.val:.4f} ({scaler_meter.avg:.4f})\t'
                 f'mem {memory_used:.0f}MB')
             #commet ml logging
+            
             experiment.log_metric("lr", lr)
             experiment.log_metric("wd", wd)
             experiment.log_metric("grad_norm", norm_meter.avg)
@@ -285,7 +301,7 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
 
 
 @torch.no_grad()
-def validate(config, data_loader, model):
+def validate(config, data_loader, model, experiment):
     criterion_cls = torch.nn.CrossEntropyLoss() ## changed
     criterion_reg = torch.nn.MSELoss() ## changed
     model.eval()
@@ -392,6 +408,7 @@ def throughput(data_loader, model, logger):
 
 if __name__ == '__main__':
     args, config = parse_option()
+    
 
     if config.AMP_OPT_LEVEL:
         print("[warning] Apex amp has been deprecated, please use pytorch amp instead!")
@@ -442,7 +459,5 @@ if __name__ == '__main__':
     logger.info(config.dump())
     logger.info(json.dumps(vars(args)))
     
-    # comet ml logging
-    experiment.log_parameters(vars(args))
 
     main(config)
