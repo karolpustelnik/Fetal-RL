@@ -94,13 +94,15 @@ def build_loader(config):
 
 
 def build_dataset(is_train, config):
+    #affix = config.MODEL.AFFIX
     transform = build_transform(is_train, config)
     if config.DATA.DATASET == 'fetal':
         prefix = 'fetal_extracted'
         if is_train:
-            ann_path =  "/data/kpusteln/fetal/fetal_extracted_map_train_scr.csv"
+            ann_path =  "/data/kpusteln/fetal/fetal_extracted_map_train_scr.csv" #+ affix
+
         else:
-            ann_path =  "/data/kpusteln/fetal/fetal_extracted_map_val_scr.csv"
+            ann_path =  "/data/kpusteln/fetal/fetal_extracted_map_val_scr.csv" #+ affix
         dataset = Fetal(config.DATA.DATA_PATH, ann_path, transform)
         nb_classes = 7
     print(nb_classes)

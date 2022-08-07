@@ -57,6 +57,7 @@ _C.MODEL.NUM_CLASSES = 7
 _C.MODEL.DROP_RATE = 0.0
 # Task type
 _C.MODEL.TASK_TYPE = 'reg'
+#_C.MODEL.AFFIX = '.csv'
 # Drop path rate
 _C.MODEL.DROP_PATH_RATE = 0.1
 # Label Smoothing

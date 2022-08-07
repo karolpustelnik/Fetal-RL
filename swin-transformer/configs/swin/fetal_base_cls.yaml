@@ -3,7 +3,7 @@ DATA:
   DATASET: fetal
 MODEL:
   TYPE: swin
-  NAME: fetal_base_cls
+  NAME: fetal_base_cls2
   DROP_PATH_RATE: 0.5
   DROP_RATE: 0.5
   NUM_CLASSES: 4

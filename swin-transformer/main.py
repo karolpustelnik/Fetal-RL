@@ -46,7 +46,7 @@ from logger import create_logger
 from utils import load_checkpoint, load_pretrained, save_checkpoint, NativeScalerWithGradNormCount, auto_resume_helper, \
     reduce_tensor
 
-def get_experiment(run_id = 'fetal_simple_cls'):
+def get_experiment(run_id = 'fetal_reg_cls1'):
     experiment_id = hashlib.sha1(run_id.encode("utf-8")).hexdigest()
     os.environ["COMET_EXPERIMENT_KEY"] = experiment_id
 
@@ -54,10 +54,10 @@ def get_experiment(run_id = 'fetal_simple_cls'):
     api_experiment = api.get_experiment_by_id(experiment_id)
 
     if api_experiment is None:
-        return comet_ml.Experiment(api_key ='3YfcpxE1bYPCpkkg4pQ2OjQ2r', project_name = 'Fetal swin simple cls')
+        return comet_ml.Experiment(api_key ='3YfcpxE1bYPCpkkg4pQ2OjQ2r', project_name = 'Fetal swin reg cls1')
 
     else:
-        return comet_ml.ExistingExperiment(api_key ='3YfcpxE1bYPCpkkg4pQ2OjQ2r', project_name='Fetal swin simple cls')
+        return comet_ml.ExistingExperiment(api_key ='3YfcpxE1bYPCpkkg4pQ2OjQ2r', project_name='Fetal swin reg cls1')
 
 def parse_option():
     parser = argparse.ArgumentParser('Swin Transformer training and evaluation script', add_help=False)
