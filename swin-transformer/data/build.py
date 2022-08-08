@@ -15,6 +15,7 @@ from timm.data import Mixup
 from timm.data import create_transform
 
 from .fetal_loader import Fetal
+from .elegans_loader import Elegans
 
 try:
     from torchvision.transforms import InterpolationMode
@@ -94,25 +95,37 @@ def build_loader(config):
 
 
 def build_dataset(is_train, config):
-    #affix = config.MODEL.AFFIX
-    transform = build_transform(is_train, config)
+    affix = config.MODEL.AFFIX
+    transform = build_transform(is_train, config, config.DATA.DATASET)
     if config.DATA.DATASET == 'fetal':
         prefix = 'fetal_extracted'
         if is_train:
-            ann_path =  "/data/kpusteln/fetal/fetal_extracted_map_train_scr.csv" #+ affix
+            ann_path =  "/data/kpusteln/fetal/fetal_extracted_map_train_scr" + affix
 
         else:
-            ann_path =  "/data/kpusteln/fetal/fetal_extracted_map_val_scr.csv" #+ affix
+            ann_path =  "/data/kpusteln/fetal/fetal_extracted_map_val_scr" + affix
         dataset = Fetal(config.DATA.DATA_PATH, ann_path, transform)
-        nb_classes = 7
-    print(nb_classes)
+        nb_classes = config.MODEL.NUM_CLASSES
+    elif config.DATA.DATASET == 'elegans':
+        if is_train:
+            ann_path =  "/data/kpusteln/elegans_fake/data_train.csv" #+ affix
+
+        else:
+            ann_path =  "/data/kpusteln/elegans_fake/data_test.csv" #+ affix
+        dataset = Elegans(config.DATA.DATA_PATH, ann_path, transform)
+        nb_classes = config.MODEL.NUM_CLASSES
 
     return dataset, nb_classes
 
 
-def build_transform(is_train, config):
-    t = transforms.Compose([transforms.Resize((450, 600)),
-                    transforms.Pad((0, 0, 0, 150), fill = 0, padding_mode = 'constant'),
-                    transforms.Resize((224, 224)),
-                    transforms.ToTensor()])
+def build_transform(is_train, config, dataset_name):
+    if dataset_name == 'fetal':
+        t = transforms.Compose([transforms.Resize((450, 600)),
+                        transforms.Pad((0, 0, 0, 150), fill = 0, padding_mode = 'constant'),
+                        transforms.Resize((224, 224)),
+                        transforms.ToTensor()])
+    elif dataset_name == 'elegans':
+        t = transforms.Compose([transforms.Pad((0, 0, 0, 176), fill = 0, padding_mode = 'constant'),
+                        transforms.Resize((224, 224)),
+                        transforms.ToTensor()])
     return t

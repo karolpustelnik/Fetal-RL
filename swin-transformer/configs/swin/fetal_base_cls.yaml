@@ -3,11 +3,13 @@ DATA:
   DATASET: fetal
 MODEL:
   TYPE: swin
-  NAME: fetal_base_cls2
+  NAME: fetal_base_cls
   DROP_PATH_RATE: 0.5
   DROP_RATE: 0.5
   NUM_CLASSES: 4
   TASK_TYPE: cls
+  PROJECT_NAME: fetal-rl_cls_4_classes
+  RUN_ID: fetal_base_cls
   SWIN:
     EMBED_DIM: 128
     DEPTHS: [ 2, 2, 18, 2 ]

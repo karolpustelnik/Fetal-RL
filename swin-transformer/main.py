@@ -45,8 +45,10 @@ from optimizer import build_optimizer
 from logger import create_logger
 from utils import load_checkpoint, load_pretrained, save_checkpoint, NativeScalerWithGradNormCount, auto_resume_helper, \
     reduce_tensor
+    
 
-def get_experiment(run_id = 'fetal_reg_cls1'):
+
+def get_experiment(project_name, run_id):
     experiment_id = hashlib.sha1(run_id.encode("utf-8")).hexdigest()
     os.environ["COMET_EXPERIMENT_KEY"] = experiment_id
 
@@ -54,10 +56,10 @@ def get_experiment(run_id = 'fetal_reg_cls1'):
     api_experiment = api.get_experiment_by_id(experiment_id)
 
     if api_experiment is None:
-        return comet_ml.Experiment(api_key ='3YfcpxE1bYPCpkkg4pQ2OjQ2r', project_name = 'Fetal swin reg cls1')
+        return comet_ml.Experiment(api_key ='3YfcpxE1bYPCpkkg4pQ2OjQ2r', project_name = project_name)
 
     else:
-        return comet_ml.ExistingExperiment(api_key ='3YfcpxE1bYPCpkkg4pQ2OjQ2r', project_name='Fetal swin reg cls1')
+        return comet_ml.ExistingExperiment(api_key ='3YfcpxE1bYPCpkkg4pQ2OjQ2r', project_name = project_name)
 
 def parse_option():
     parser = argparse.ArgumentParser('Swin Transformer training and evaluation script', add_help=False)
@@ -106,7 +108,9 @@ def parse_option():
 
 
 def main(config):
-    experiment = get_experiment()
+    local_rank = int(os.environ["LOCAL_RANK"])
+    
+    experiment = get_experiment(config.MODEL.PROJECT_NAME, config.MODEL.RUN_ID)
     dataset_train, dataset_val, data_loader_train, data_loader_val, mixup_fn = build_loader(config)
 
     logger.info(f"Creating model:{config.MODEL.TYPE}/{config.MODEL.NAME}")
@@ -124,7 +128,7 @@ def main(config):
     model_without_ddp = model
 
     optimizer = build_optimizer(config, model)
-    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[config.LOCAL_RANK], broadcast_buffers=False)
+    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank], broadcast_buffers=False)
     loss_scaler = NativeScalerWithGradNormCount()
 
     if config.TRAIN.ACCUMULATION_STEPS > 1:
@@ -243,10 +247,10 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
         if config.MODEL.TASK_TYPE == 'cls':
             loss_cls = criterion_cls(outputs, targets) ## changed
             loss = loss_cls
-        if config.MODEL.TASK_TYPE == 'reg':
+        elif config.MODEL.TASK_TYPE == 'reg':
             loss_reg = criterion_reg(outputs, scores)
             loss = loss_reg
-        if config.MODEL.TASK_TYPE == 'cls_reg':
+        elif config.MODEL.TASK_TYPE == 'cls_reg':
             loss_cls = criterion_cls(outputs[0], targets)
             loss_reg = criterion_reg(outputs[1], scores)
             loss = loss_cls + loss_reg
@@ -327,13 +331,13 @@ def validate(config, data_loader, model, experiment):
         # measure accuracy and record loss
         if config.MODEL.TASK_TYPE == 'cls':
             loss_cls = criterion_cls(output, target)
-        if config.MODEL.TASK_TYPE == 'reg':
+        elif config.MODEL.TASK_TYPE == 'reg':
             loss_reg = criterion_reg(output, scores)
             
         if config.MODEL.TASK_TYPE == 'cls':
             acc1, _ = accuracy(output, target, topk=(1, 5))
-            precision, recall = precision_recall(output, target, average = 'macro', num_classes = 7)
-            f1 = f1_score(output, target, average = 'macro', num_classes = 7)
+            precision, recall = precision_recall(output, target, average = 'macro', num_classes = config.MODEL.NUM_CLASSES)
+            f1 = f1_score(output, target, average = 'macro', num_classes = config.MODEL.NUM_CLASSES)
             acc1 = reduce_tensor(acc1)
             f1 = reduce_tensor(f1)
             precision = reduce_tensor(precision)
@@ -345,7 +349,7 @@ def validate(config, data_loader, model, experiment):
             recall_meter.update(recall.item(), target.size(0))
             f1_score_meter.update(f1.item(), target.size(0))
             
-        if config.MODEL.TASK_TYPE == 'reg':
+        elif config.MODEL.TASK_TYPE == 'reg':
             loss_reg = reduce_tensor(loss_reg)
             loss_meter_reg.update(loss_reg.item(), target.size(0))
 
@@ -409,7 +413,7 @@ def throughput(data_loader, model, logger):
 if __name__ == '__main__':
     args, config = parse_option()
     
-
+    local_rank = int(os.environ["LOCAL_RANK"])
     if config.AMP_OPT_LEVEL:
         print("[warning] Apex amp has been deprecated, please use pytorch amp instead!")
 
@@ -420,10 +424,11 @@ if __name__ == '__main__':
     else:
         rank = -1
         world_size = -1
-    torch.cuda.set_device(config.LOCAL_RANK)
+    print("dupa")
+    torch.cuda.set_device(local_rank)
     torch.distributed.init_process_group(backend='nccl', init_method='env://', world_size=world_size, rank=rank)
     torch.distributed.barrier()
-
+    print('dupa2')
     seed = config.SEED + dist.get_rank()
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)

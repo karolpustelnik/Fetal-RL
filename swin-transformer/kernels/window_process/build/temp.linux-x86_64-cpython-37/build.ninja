@@ -16,12 +16,12 @@ rule compile
 rule cuda_compile
   depfile = $out.d
   deps = gcc
-  command = $nvcc  $cuda_cflags -c $in -o $out $cuda_post_cflags
+  command = $nvcc --generate-dependencies-with-compile --dependency-output $out.d $cuda_cflags -c $in -o $out $cuda_post_cflags
 
 
 
-build /data/kpusteln/Swin-Transformer/kernels/window_process/build/temp.linux-x86_64-cpython-37/swin_window_process.o: compile /data/kpusteln/Swin-Transformer/kernels/window_process/swin_window_process.cpp
-build /data/kpusteln/Swin-Transformer/kernels/window_process/build/temp.linux-x86_64-cpython-37/swin_window_process_kernel.o: cuda_compile /data/kpusteln/Swin-Transformer/kernels/window_process/swin_window_process_kernel.cu
+build /data/kpusteln/Fetal-RL/swin-transformer/kernels/window_process/build/temp.linux-x86_64-cpython-37/swin_window_process.o: compile /data/kpusteln/Fetal-RL/swin-transformer/kernels/window_process/swin_window_process.cpp
+build /data/kpusteln/Fetal-RL/swin-transformer/kernels/window_process/build/temp.linux-x86_64-cpython-37/swin_window_process_kernel.o: cuda_compile /data/kpusteln/Fetal-RL/swin-transformer/kernels/window_process/swin_window_process_kernel.cu
 
 
 

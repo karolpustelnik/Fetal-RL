@@ -44,6 +44,8 @@ _C.DATA.NUM_WORKERS = 2
 _C.MODEL = CN()
 # Model type
 _C.MODEL.TYPE = 'swin'
+_C.MODEL.RUN_ID = 'default' # comet ml run id
+_C.MODEL.PROJECT_NAME = 'default' #comet ml project name
 # Model name
 _C.MODEL.NAME = 'swin_tiny_patch4_window7_224'
 # Pretrained weight from checkpoint, could be imagenet22k pretrained weight
@@ -57,7 +59,7 @@ _C.MODEL.NUM_CLASSES = 7
 _C.MODEL.DROP_RATE = 0.0
 # Task type
 _C.MODEL.TASK_TYPE = 'reg'
-#_C.MODEL.AFFIX = '.csv'
+_C.MODEL.AFFIX = '.csv'
 # Drop path rate
 _C.MODEL.DROP_PATH_RATE = 0.1
 # Label Smoothing

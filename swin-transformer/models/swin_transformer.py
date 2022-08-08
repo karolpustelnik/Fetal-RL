@@ -607,7 +607,7 @@ class SwinTransformer(nn.Module):
             x = self.forward_features(x)
             x = self.cls_head(x)
             return x
-        if self.task_type == 'reg':
+        elif self.task_type == 'reg':
             x = self.forward_features(x)
             x = self.reg_head(x)
             x_score = x.squeeze(1)
