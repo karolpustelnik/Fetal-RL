@@ -25,6 +25,7 @@ import random
 import argparse
 import datetime
 import numpy as np
+import pandas as pd
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -140,15 +141,15 @@ def main(config):
         # smoothing is handled with mixup label transform
         print(f'{config.AUG.MIXUP} ##########################################################################')
         criterion_cls = SoftTargetCrossEntropy()
-        criterion_reg = torch.nn.MSELoss()
+        criterion_reg = torch.nn.L1Loss()
     elif config.MODEL.LABEL_SMOOTHING > 0.:
         print(f'{config.MODEL.LABEL_SMOOTHING} ##########################################################################')
         criterion_cls = LabelSmoothingCrossEntropy()
-        criterion_reg = torch.nn.MSELoss()
+        criterion_reg = torch.nn.L1Loss()
     else:
         print('dziala jak trzeba ##########################################################################')
         criterion_cls = torch.nn.CrossEntropyLoss()
-        criterion_reg = torch.nn.MSELoss()
+        criterion_reg = torch.nn.L1Loss()
 
     max_accuracy = 0.0
 
@@ -175,7 +176,12 @@ def main(config):
             logger.info(f"Loss of the network on the {len(dataset_val)} test images: {loss_cls:.4f}")
             max_accuracy = max(max_accuracy, acc1)
             logger.info(f'Max accuracy: {max_accuracy:.2f}%')
-        if config.MODEL.TASK_TYPE == 'reg':
+            experiment.log_metric('test_accuracy', acc1)
+            experiment.log_metric('test_f1_score', f1_score)
+            experiment.log_metric('test_recall', recall)
+            experiment.log_metric('test_precision', precision)
+            experiment.log_metric('test_loss_cls', loss_cls)
+        elif config.MODEL.TASK_TYPE == 'reg':
             logger.info(f"Loss of the network on the {len(dataset_val)} test images: {loss_reg:.4f}")
         if config.EVAL_MODE:
             return
@@ -187,7 +193,11 @@ def main(config):
         logger.info(f"f1 score of the network on the {len(dataset_val)} test images: {f1_score*100}%")
         logger.info(f"recall of the network on the {len(dataset_val)} test images: {recall*100}%")
         logger.info(f"precision of the network on the {len(dataset_val)} test images: {precision*100}%")
-
+        experiment.log_metric('test_accuracy', acc1)
+        experiment.log_metric('test_f1_score', f1_score)
+        experiment.log_metric('test_recall', recall)
+        experiment.log_metric('test_precision', precision)
+        experiment.log_metric('test_loss_cls', loss_cls)
     if config.THROUGHPUT_MODE:
         throughput(data_loader_val, model, logger)
         return
@@ -212,7 +222,12 @@ def main(config):
             logger.info(f"Loss of the network on the {len(dataset_val)} test images: {loss_cls:.4f}")
             max_accuracy = max(max_accuracy, acc1)
             logger.info(f'Max accuracy: {max_accuracy:.2f}%')
-        if config.MODEL.TASK_TYPE == 'reg':
+            experiment.log_metric('test_accuracy', acc1)
+            experiment.log_metric('test_f1_score', f1_score)
+            experiment.log_metric('test_recall', recall)
+            experiment.log_metric('test_precision', precision)
+            experiment.log_metric('test_loss_cls', loss_cls)
+        elif config.MODEL.TASK_TYPE == 'reg':
             logger.info(f"Loss of the network on the {len(dataset_val)} test images: {loss_reg:.4f}")
 
 
@@ -250,6 +265,7 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
         elif config.MODEL.TASK_TYPE == 'reg':
             loss_reg = criterion_reg(outputs, scores)
             loss = loss_reg
+            
         elif config.MODEL.TASK_TYPE == 'cls_reg':
             loss_cls = criterion_cls(outputs[0], targets)
             loss_reg = criterion_reg(outputs[1], scores)
@@ -307,7 +323,7 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
 @torch.no_grad()
 def validate(config, data_loader, model, experiment):
     criterion_cls = torch.nn.CrossEntropyLoss() ## changed
-    criterion_reg = torch.nn.MSELoss() ## changed
+    criterion_reg = torch.nn.L1Loss() ## changed
     model.eval()
 
     batch_time = AverageMeter()
@@ -319,7 +335,14 @@ def validate(config, data_loader, model, experiment):
     f1_score_meter = AverageMeter()
 
     end = time.time()
+    indexes_list = []
+    gt_scores = []
+    preds = []
+    dupa = 0
+    worst_losses = []
     for idx, (images, target, scores) in enumerate(data_loader): ## changed
+        #indexes_list.extend(indexes)
+        #gt_scores.extend(scores)
         images = images.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
         scores = scores.type(torch.float16).cuda(non_blocking=True)
@@ -327,15 +350,20 @@ def validate(config, data_loader, model, experiment):
         # compute output
         with torch.cuda.amp.autocast(enabled=config.AMP_ENABLE):
             output = model(images)
+            #output_cpu = output.cpu()
+            #preds.extend(output_cpu)
+            #scores_output = torch.cat((scores_output, output_cpu), 0)
 
         # measure accuracy and record loss
         if config.MODEL.TASK_TYPE == 'cls':
             loss_cls = criterion_cls(output, target)
         elif config.MODEL.TASK_TYPE == 'reg':
             loss_reg = criterion_reg(output, scores)
+            worst_loss = max(torch.nn.functional.l1_loss(output, scores, reduction = 'none'))
+            worst_losses.append(worst_loss)
             
         if config.MODEL.TASK_TYPE == 'cls':
-            acc1, _ = accuracy(output, target, topk=(1, 5))
+            acc1, _ = accuracy(output, target, topk=(1, 3))
             precision, recall = precision_recall(output, target, average = 'macro', num_classes = config.MODEL.NUM_CLASSES)
             f1 = f1_score(output, target, average = 'macro', num_classes = config.MODEL.NUM_CLASSES)
             acc1 = reduce_tensor(acc1)
@@ -376,16 +404,10 @@ def validate(config, data_loader, model, experiment):
         logger.info(f' * precision {precision_meter.avg:.3f}')
         
         ## comet ml logging
-        experiment.log_metric('test_accuracy', acc1_meter.avg)
-        experiment.log_metric('test_f1_score', f1_score_meter.avg)
-        experiment.log_metric('test_recall', recall_meter.avg)
-        experiment.log_metric('test_precision', precision_meter.avg)
-        experiment.log_metric('test_loss_cls', loss_meter_cls.avg)
-        experiment.log_metric('test_loss_reg', loss_meter_reg.avg)
-        experiment.log_image((images[0]).squeeze(0).cpu(), name=None, overwrite=False, image_format="png",
-        image_scale=1.0, image_shape=None, image_colormap=None,
-        image_minmax=None, image_channels="first", copy_to_tmp=True, step=None)
-        experiment.log_confusion_matrix(target.cpu(), output.cpu())
+        #experiment.log_image((images[0]).squeeze(0).cpu(), name=None, overwrite=False, image_format="png",
+        #image_scale=1.0, image_shape=None, image_colormap=None,
+        #image_minmax=None, image_channels="first", copy_to_tmp=True, step=None)
+        #experiment.log_confusion_matrix(target.cpu(), output.cpu())
 
     return acc1_meter.avg, f1_score_meter.avg, recall_meter.avg, precision_meter.avg, loss_meter_cls.avg, loss_meter_reg.avg
 

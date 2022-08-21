@@ -122,8 +122,9 @@ def build_transform(is_train, config, dataset_name):
     if dataset_name == 'fetal':
         t = transforms.Compose([transforms.Resize((450, 600)),
                         transforms.Pad((0, 0, 0, 150), fill = 0, padding_mode = 'constant'),
-                        transforms.Resize((224, 224)),
-                        transforms.ToTensor()])
+                        transforms.Resize((config.DATA.IMG_SIZE, config.DATA.IMG_SIZE)),
+                        transforms.ToTensor(),
+                        transforms.Normalize(mean=0.1354949, std=0.18222201)])
     elif dataset_name == 'elegans':
         t = transforms.Compose([transforms.Pad((0, 0, 0, 176), fill = 0, padding_mode = 'constant'),
                         transforms.Resize((224, 224)),

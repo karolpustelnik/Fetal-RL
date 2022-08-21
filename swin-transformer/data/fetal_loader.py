@@ -42,13 +42,15 @@ class Fetal(data.Dataset):
         idb = self.database.iloc[index]
 
         # images
-        images = self._load_image(self.data_path  + idb[0] + '.png').convert('RGB')
+        images = self._load_image(self.data_path  + idb[0] + '.png')
         if self.transform is not None:
             images = self.transform(images)
 
         # target
+        indexes = idb[0]
         target = idb[1]
-        score = idb[2]
+        #score = idb[2]
+        score = 1
         if self.target_transform is not None:
             target = self.target_transform(target)
         #save_image(images[0], '/data/kpusteln/examples' + str(index) + '.png')

@@ -5,13 +5,13 @@
 # Written by Ze Liu
 # --------------------------------------------------------
 
-from .swin_transformer import SwinTransformer
+from .swin_transformer import SwinTransformer, ResNet101, EffNet
 
 
 def build_model(config):
     model_type = config.MODEL.TYPE
     if model_type == 'swin':
-        model = SwinTransformer(img_size=config.DATA.IMG_SIZE,
+        model = SwinTransformer(img_size=config.DATA.IMG_SIZE_SWIN,
                                 patch_size=config.MODEL.SWIN.PATCH_SIZE,
                                 in_chans=config.MODEL.SWIN.IN_CHANS,
                                 num_classes=config.MODEL.NUM_CLASSES,
@@ -29,8 +29,9 @@ def build_model(config):
                                 patch_norm=config.MODEL.SWIN.PATCH_NORM,
                                 use_checkpoint=config.TRAIN.USE_CHECKPOINT,
                                 fused_window_process=config.FUSED_WINDOW_PROCESS)
-
-    else:
-        raise NotImplementedError(f"Unkown model: {model_type}")
-
+    elif model_type == 'resnet101':
+        model = ResNet101(out_features = config.MODEL.NUM_CLASSES)
+    elif model_type == 'effnet':
+        model = EffNet(out_features = config.MODEL.NUM_CLASSES)
+        
     return model
