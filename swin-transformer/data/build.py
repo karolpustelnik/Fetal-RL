@@ -14,8 +14,9 @@ from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.data import Mixup
 from timm.data import create_transform
 
-from .fetal_loader import Fetal
-from .elegans_loader import Elegans
+from .fetal_loader import Fetal_frame, Fetal_vid
+from .covid_loader import Covid_loader
+from .melanoma_loader import Melanoma_loader
 
 try:
     from torchvision.transforms import InterpolationMode
@@ -65,22 +66,36 @@ def build_loader(config):
             dataset_val, shuffle=config.TEST.SHUFFLE
         )
 
-    data_loader_train = torch.utils.data.DataLoader(
-        dataset_train, sampler=sampler_train,
-        batch_size=config.DATA.BATCH_SIZE,
-        num_workers=config.DATA.NUM_WORKERS,
-        pin_memory=config.DATA.PIN_MEMORY,
-        drop_last=True,
-    )
+    if config.PARALLEL_TYPE == 'model_parallel':
+        data_loader_train = torch.utils.data.DataLoader(
+            dataset_train, 
+            batch_size=config.DATA.BATCH_SIZE,
+            num_workers=config.DATA.NUM_WORKERS,
+            shuffle = True,
+            drop_last = False)
+        
+        data_loader_val = torch.utils.data.DataLoader(
+            dataset_val, 
+            batch_size=config.DATA.BATCH_SIZE,
+            num_workers=config.DATA.NUM_WORKERS,
+            shuffle = False,
+            drop_last = False)
+        
+    elif config.PARALLEL_TYPE == 'ddp':
+        data_loader_train = torch.utils.data.DataLoader(
+            dataset_train, 
+            sampler=sampler_train,
+            batch_size=config.DATA.BATCH_SIZE,
+            num_workers=config.DATA.NUM_WORKERS,
+            drop_last = False)
+        
+        data_loader_val = torch.utils.data.DataLoader(
+            dataset_val, 
+            sampler = sampler_val,
+            batch_size=config.DATA.BATCH_SIZE,
+            num_workers=config.DATA.NUM_WORKERS,
+            drop_last=False)
 
-    data_loader_val = torch.utils.data.DataLoader(
-        dataset_val, sampler=sampler_val,
-        batch_size=config.DATA.BATCH_SIZE,
-        shuffle=False,
-        num_workers=config.DATA.NUM_WORKERS,
-        pin_memory=config.DATA.PIN_MEMORY,
-        drop_last=False
-    )
 
     # setup mixup / cutmix
     mixup_fn = None
@@ -97,29 +112,59 @@ def build_loader(config):
 def build_dataset(is_train, config):
     affix = config.MODEL.AFFIX
     transform = build_transform(is_train, config, config.DATA.DATASET)
+    part = config.DATA.PART
     if config.DATA.DATASET == 'fetal':
-        prefix = 'fetal_extracted'
         if is_train:
-            ann_path =  "/data/kpusteln/fetal/fetal_extracted_map_train_scr" + affix
+            ann_path =  f'/data/kpusteln/fetal/standard_plane/{part}_biometry_train.csv'
+            videos_path = f'/data/kpusteln/Fetal-RL/data_preparation/data_biometry/videos_train_{part}.csv'
 
         else:
-            ann_path =  "/data/kpusteln/fetal/fetal_extracted_map_val_scr" + affix
-        dataset = Fetal(config.DATA.DATA_PATH, ann_path, transform)
-        nb_classes = config.MODEL.NUM_CLASSES
-    elif config.DATA.DATASET == 'elegans':
+            ann_path =  f'/data/kpusteln/fetal/standard_plane/{part}_biometry_val.csv'
+            videos_path = f'/data/kpusteln/Fetal-RL/data_preparation/data_biometry/videos_val_{part}.csv'
+        if config.PARALLEL_TYPE == 'model_parallel':
+            dataset = Fetal_vid(videos_path = videos_path,
+                            root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform)
+            nb_classes = config.MODEL.NUM_CLASSES
+            
+        elif config.PARALLEL_TYPE == 'ddp':
+            dataset = Fetal_frame(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform)
+            nb_classes = config.MODEL.NUM_CLASSES
+            
+    elif config.DATA.DATASET == 'covid':
+        
         if is_train:
-            ann_path =  "/data/kpusteln/elegans_fake/data_train.csv" #+ affix
+            
+            ann_path =  config.DATA.TRAIN_PATH
+        else: 
+            
+            ann_path =  config.DATA.VAL_PATH
+            
+        if config.PARALLEL_TYPE == 'ddp':
+            dataset = Covid_loader(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform)
+            nb_classes = config.MODEL.NUM_CLASSES
+            
+    elif config.DATA.DATASET == 'melanoma':
+        
+        if is_train:
+            
+            ann_path =  config.DATA.TRAIN_PATH
+        else: 
+            
+            ann_path =  config.DATA.VAL_PATH
+            
+        if config.PARALLEL_TYPE == 'ddp':
+            dataset = Melanoma_loader(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform)
+            nb_classes = config.MODEL.NUM_CLASSES
+            
 
-        else:
-            ann_path =  "/data/kpusteln/elegans_fake/data_test.csv" #+ affix
-        dataset = Elegans(config.DATA.DATA_PATH, ann_path, transform)
-        nb_classes = config.MODEL.NUM_CLASSES
 
     return dataset, nb_classes
 
 
 def build_transform(is_train, config, dataset_name):
+    
     if dataset_name == 'fetal':
+        
         t = transforms.Compose([transforms.Resize((450, 600)),
                         transforms.Pad((0, 0, 0, 150), fill = 0, padding_mode = 'constant'),
                         transforms.Resize((config.DATA.IMG_SIZE, config.DATA.IMG_SIZE)),
@@ -129,4 +174,36 @@ def build_transform(is_train, config, dataset_name):
         t = transforms.Compose([transforms.Pad((0, 0, 0, 176), fill = 0, padding_mode = 'constant'),
                         transforms.Resize((224, 224)),
                         transforms.ToTensor()])
+        
+    elif dataset_name == 'covid':
+        if is_train:
+            t = transforms.Compose([transforms.ToTensor(),
+                                    transforms.Resize((config.DATA.IMG_SIZE, config.DATA.IMG_SIZE)),
+                                    transforms.Normalize(mean=0.5127516, std=0.24692915),
+                                    #transforms.RandomHorizontalFlip(p=0.5),
+                                    transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
+                                    transforms.RandomVerticalFlip(p=0.5),
+                                    transforms.RandomAffine(degrees=(-15, 15), scale=(0.85, 1.15))
+                                    ]) 
+              
+        else:
+            t = transforms.Compose([transforms.ToTensor(),
+                                    transforms.Resize((config.DATA.IMG_SIZE, config.DATA.IMG_SIZE)),
+                                    transforms.Normalize(mean=0.5127516, std=0.24692915)])
+            
+    elif dataset_name == 'melanoma':
+        if is_train:
+            t = transforms.Compose([transforms.ToTensor(),
+                                    transforms.Resize((config.DATA.IMG_SIZE, config.DATA.IMG_SIZE)),
+                                    transforms.RandomHorizontalFlip(p=0.5),
+                                    #transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
+                                    transforms.RandomVerticalFlip(p=0.5),
+                                    transforms.RandomAffine(degrees=(-15, 15), scale=(0.85, 1.15)),
+                                    transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+                                    ]) 
+              
+        else:
+            t = transforms.Compose([transforms.ToTensor(),
+                                    transforms.Resize((config.DATA.IMG_SIZE, config.DATA.IMG_SIZE)),
+                                    transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])])
     return t

@@ -24,6 +24,8 @@ _C.DATA.BATCH_SIZE = 128
 _C.DATA.DATA_PATH = ''
 # Dataset name
 _C.DATA.DATASET = 'imagenet'
+_C.DATA.TRAIN_PATH = '/home/zhengyuan/data/imagenet'
+_C.DATA.VAL_PATH = '/home/zhengyuan/data/imagenet'
 # Input image size
 _C.DATA.IMG_SIZE = 512
 _C.DATA.IMG_SIZE_SWIN = 64
@@ -38,6 +40,7 @@ _C.DATA.CACHE_MODE = 'part'
 _C.DATA.PIN_MEMORY = True
 # Number of data loading threads
 _C.DATA.NUM_WORKERS = 2
+_C.DATA.PART = 'abdomen'
 
 # -----------------------------------------------------------------------------
 # Model settings
@@ -48,12 +51,14 @@ _C.MODEL.TYPE = 'swin'
 _C.MODEL.RUN_ID = 'default' # comet ml run id
 _C.MODEL.PROJECT_NAME = 'default' #comet ml project name
 # Model name
+_C.MODEL.FREEZE = False
 _C.MODEL.NAME = 'swin_tiny_patch4_window7_224'
 # Pretrained weight from checkpoint, could be imagenet22k pretrained weight
 # could be overwritten by command line argument
 _C.MODEL.PRETRAINED = ''
 # Checkpoint to resume, could be overwritten by command line argument
 _C.MODEL.RESUME = ''
+_C.MODEL.IN_CHANNELS = 3
 # Number of classes, overwritten in data preparation
 _C.MODEL.NUM_CLASSES = 7
 # Dropout rate
@@ -242,7 +247,7 @@ _C.THROUGHPUT_MODE = False
 _C.LOCAL_RANK = 0
 # for acceleration
 _C.FUSED_WINDOW_PROCESS = False
-
+_C.PARALLEL_TYPE = 'model_parallel'
 
 def _update_config_from_file(config, cfg_file):
     config.defrost()
