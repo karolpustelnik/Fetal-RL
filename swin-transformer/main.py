@@ -223,11 +223,13 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
     
     start = time.time()
     end = time.time()
-    for idx, (images, Class, measure, ps, frames_n, measure_normalized, indexes) in enumerate(data_loader): ## changed
+    for idx, (images, Class, measure, ps, frames_n, measure_normalized, indexes, days_normalized, frame_loc) in enumerate(data_loader): ## changed
         optimizer.zero_grad()
         
         if config.PARALLEL_TYPE == 'ddp':
-            outputs = model(images)
+            with torch.autocast(device_type='cuda', dtype=torch.float16):
+                meta = torch.stack((days_normalized, frame_loc), dim = 1).cuda(non_blocking=True)
+                outputs = model((images, meta)) 
         elif config.PARALLEL_TYPE == 'model_parallel':
             #labels = labels.to('cuda:1')
             print(f'images shape before forward: {images.shape}')
@@ -243,7 +245,8 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
         elif config.MODEL.TASK_TYPE == 'reg':
             measure_normalized = measure_normalized.unsqueeze(0).cuda(non_blocking=True)
             measure_normalized = measure_normalized.reshape(-1, 1)
-            loss = criterion_reg(outputs, measure_normalized)
+            with torch.autocast(device_type='cuda', dtype=torch.float16):
+                loss = criterion_reg(outputs, measure_normalized)
         
         loss.backward()
         optimizer.step()
