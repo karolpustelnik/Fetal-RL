@@ -13,6 +13,5 @@ swin-transformer/models/__pycache__/model_utils.cpython-37.pyc
 swin-transformer/models/__pycache__/swin_transformer.cpython-39.pyc
 swin-transformer/models/__pycache__/vit.cpython-37.pyc
 swin-transformer/wandb/
-swin-transformer/__pycache__
 swin-transformer/data/__pycache__
 swin-transformer/models/__pycache__
