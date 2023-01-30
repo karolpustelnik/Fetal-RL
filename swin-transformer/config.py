@@ -22,8 +22,21 @@ _C.DATA = CN()
 _C.DATA.BATCH_SIZE = 128
 # Path to dataset, could be overwritten by command line argument
 _C.DATA.DATA_PATH = ''
+
+# train set path
+_C.DATA.TRAIN_SET = 'train'
+# val set path
+_C.DATA.VAL_SET = 'val'
 # Dataset name
 _C.DATA.DATASET = 'imagenet'
+
+_C.DATA.VIDEOS_TRAIN = 'videos_train'
+_C.DATA.VIDEOS_VAL = 'videos_val'
+
+_C.DATA.USE_PS = True
+# whether use augmentation
+
+_C.DATA.AUGM = True
 # Input image size
 _C.DATA.IMG_SIZE = 512
 _C.DATA.IMG_SIZE_SWIN = 64
@@ -38,6 +51,7 @@ _C.DATA.CACHE_MODE = 'part'
 _C.DATA.PIN_MEMORY = True
 # Number of data loading threads
 _C.DATA.NUM_WORKERS = 2
+_C.DATA.PART = 'abdomen'
 
 # -----------------------------------------------------------------------------
 # Model settings
@@ -54,6 +68,8 @@ _C.MODEL.NAME = 'swin_tiny_patch4_window7_224'
 _C.MODEL.PRETRAINED = ''
 # Checkpoint to resume, could be overwritten by command line argument
 _C.MODEL.RESUME = ''
+_C.MODEL.RESUME_DETECTOR = ''
+_C.MODEL.RESUME_REGRESOR = ''
 # Number of classes, overwritten in data preparation
 _C.MODEL.NUM_CLASSES = 7
 # Dropout rate
@@ -162,7 +178,7 @@ _C.TRAIN.USE_CHECKPOINT = False
 _C.TRAIN.LR_SCHEDULER = CN()
 _C.TRAIN.LR_SCHEDULER.NAME = 'cosine'
 # Epoch interval to decay LR, used in StepLRScheduler
-_C.TRAIN.LR_SCHEDULER.DECAY_EPOCHS = 30
+_C.TRAIN.LR_SCHEDULER.DECAY_EPOCHS = 3
 # LR decay rate, used in StepLRScheduler
 _C.TRAIN.LR_SCHEDULER.DECAY_RATE = 0.1
 
@@ -242,7 +258,7 @@ _C.THROUGHPUT_MODE = False
 _C.LOCAL_RANK = 0
 # for acceleration
 _C.FUSED_WINDOW_PROCESS = False
-
+_C.PARALLEL_TYPE = 'model_parallel'
 
 def _update_config_from_file(config, cfg_file):
     config.defrost()

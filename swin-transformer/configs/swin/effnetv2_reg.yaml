@@ -1,0 +1,26 @@
+PARALLEL_TYPE: 'ddp'
+DATA:
+  IMG_SIZE: 512
+  DATASET: fetal
+  BATCH_SIZE: 8
+  AUGM: True
+  USE_PS: False
+  TRAIN_SET: '/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/biometry_train_scaled_size.csv'
+  VAL_SET: '/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/biometry_test_scaled.csv'
+MODEL:
+  TYPE: effnetv2_meta
+  NAME: effnetv2_reg_meta
+  NUM_CLASSES: 1
+  TASK_TYPE: reg
+  AFFIX: .csv
+  LABEL_SMOOTHING: 0.0
+TRAIN:
+  EPOCHS: 90
+  WARMUP_EPOCHS: 5
+  WEIGHT_DECAY: 0.05
+  BASE_LR: 1.25e-3 # 4096 batch-size
+  WARMUP_LR: 1.25e-3
+  MIN_LR: 1.25e-6
+AUG:
+  MIXUP: 0.0
+  CUTMIX: 0.0

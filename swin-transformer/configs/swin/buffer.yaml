@@ -1,0 +1,24 @@
+PARALLEL_TYPE: 'model_parallel'
+DATA:
+  IMG_SIZE: 512
+  DATASET: fetal
+  BATCH_SIZE: 4
+  AUGM: False
+  TRAIN_SET: '/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_train.csv'
+  VAL_SET: '/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_val.csv'
+MODEL:
+  TYPE: two_models
+  NAME: Effnetv2_two_models
+  NUM_CLASSES: 7
+  AFFIX: .csv
+  LABEL_SMOOTHING: 0.0
+TRAIN:
+  EPOCHS: 20
+  WARMUP_EPOCHS: 3
+  WEIGHT_DECAY: 0.05
+  BASE_LR: 1.25e-3
+  WARMUP_LR: 1.25e-3
+  MIN_LR: 1.25e-6
+AUG:
+  MIXUP: 0.0
+  CUTMIX: 0.0

@@ -1,0 +1,27 @@
+PARALLEL_TYPE: 'ddp'
+EVAL_MODE: TRUE
+DATA:
+  IMG_SIZE: 512
+  DATASET: fetal
+  BATCH_SIZE: 256
+  AUGM: False
+  TRAIN_SET: '/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_val_eval.csv'
+  VAL_SET: '/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_val_eval.csv'
+MODEL:
+  TYPE: effnetv2
+  NAME: effnetv2_cls
+  NUM_CLASSES: 7
+  TASK_TYPE: cls
+  AFFIX: .csv
+  LABEL_SMOOTHING: 0.0
+TRAIN:
+  EPOCHS: 90
+  WARMUP_EPOCHS: 5
+  WEIGHT_DECAY: 0.05
+  BASE_LR: 1.25e-3 # 4096 batch-size
+  WARMUP_LR: 1.25e-7
+  MIN_LR: 1.25e-6
+  AUTO_RESUME: FALSE
+AUG:
+  MIXUP: 0.0
+  CUTMIX: 0.0

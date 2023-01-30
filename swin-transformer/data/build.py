@@ -14,7 +14,7 @@ from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.data import Mixup
 from timm.data import create_transform
 
-from .fetal_loader import Fetal
+from .fetal_loader import Fetal_frame, Fetal_vid_old, Fetal_vid_new, Fetal_frame_eval
 from .elegans_loader import Elegans
 
 try:
@@ -65,22 +65,36 @@ def build_loader(config):
             dataset_val, shuffle=config.TEST.SHUFFLE
         )
 
-    data_loader_train = torch.utils.data.DataLoader(
-        dataset_train, sampler=sampler_train,
-        batch_size=config.DATA.BATCH_SIZE,
-        num_workers=config.DATA.NUM_WORKERS,
-        pin_memory=config.DATA.PIN_MEMORY,
-        drop_last=True,
-    )
+    if config.PARALLEL_TYPE == 'model_parallel':
+        data_loader_train = torch.utils.data.DataLoader(
+            dataset_train, 
+            batch_size=config.DATA.BATCH_SIZE,
+            num_workers=config.DATA.NUM_WORKERS,
+            shuffle = True,
+            drop_last = False)
+        
+        data_loader_val = torch.utils.data.DataLoader(
+            dataset_val, 
+            batch_size=config.DATA.BATCH_SIZE,
+            num_workers=config.DATA.NUM_WORKERS,
+            shuffle = False,
+            drop_last = False)
+        
+    elif config.PARALLEL_TYPE == 'ddp':
+        data_loader_train = torch.utils.data.DataLoader(
+            dataset_train, 
+            sampler=sampler_train,
+            batch_size=config.DATA.BATCH_SIZE,
+            num_workers=config.DATA.NUM_WORKERS,
+            drop_last = False)
+        
+        data_loader_val = torch.utils.data.DataLoader(
+            dataset_val, 
+            sampler = sampler_val,
+            batch_size=config.DATA.BATCH_SIZE,
+            num_workers=config.DATA.NUM_WORKERS,
+            drop_last=False)
 
-    data_loader_val = torch.utils.data.DataLoader(
-        dataset_val, sampler=sampler_val,
-        batch_size=config.DATA.BATCH_SIZE,
-        shuffle=False,
-        num_workers=config.DATA.NUM_WORKERS,
-        pin_memory=config.DATA.PIN_MEMORY,
-        drop_last=False
-    )
 
     # setup mixup / cutmix
     mixup_fn = None
@@ -98,35 +112,43 @@ def build_dataset(is_train, config):
     affix = config.MODEL.AFFIX
     transform = build_transform(is_train, config, config.DATA.DATASET)
     if config.DATA.DATASET == 'fetal':
-        prefix = 'fetal_extracted'
         if is_train:
-            ann_path =  "/data/kpusteln/fetal/fetal_extracted_map_train_scr" + affix
+            ann_path =  config.DATA.TRAIN_SET
+            videos_path = config.DATA.VIDEOS_TRAIN
+            #videos_path = f'/data/kpusteln/Fetal-RL/data_preparation/data_biometry/videos_train_{part}.csv'
 
         else:
-            ann_path =  "/data/kpusteln/fetal/fetal_extracted_map_val_scr" + affix
-        dataset = Fetal(config.DATA.DATA_PATH, ann_path, transform)
+            ann_path =  config.DATA.VAL_SET
+            videos_path = config.DATA.VIDEOS_VAL
+            #videos_path = f'/data/kpusteln/Fetal-RL/data_preparation/data_biometry/videos_val_{part}.csv'
+    if config.PARALLEL_TYPE == 'model_parallel':
+        dataset = Fetal_frame(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform)
         nb_classes = config.MODEL.NUM_CLASSES
-    elif config.DATA.DATASET == 'elegans':
-        if is_train:
-            ann_path =  "/data/kpusteln/elegans_fake/data_train.csv" #+ affix
+        
+    elif config.PARALLEL_TYPE == 'ddp':
+            dataset = Fetal_frame(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform)
+            nb_classes = config.MODEL.NUM_CLASSES
+    if config.TRAIN.AUTO_RESUME == False:
+            dataset = Fetal_frame_eval(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform)
+            nb_classes = config.MODEL.NUM_CLASSES
 
-        else:
-            ann_path =  "/data/kpusteln/elegans_fake/data_test.csv" #+ affix
-        dataset = Elegans(config.DATA.DATA_PATH, ann_path, transform)
-        nb_classes = config.MODEL.NUM_CLASSES
+
 
     return dataset, nb_classes
 
 
 def build_transform(is_train, config, dataset_name):
     if dataset_name == 'fetal':
-        t = transforms.Compose([transforms.Resize((450, 600)),
-                        transforms.Pad((0, 0, 0, 150), fill = 0, padding_mode = 'constant'),
-                        transforms.Resize((config.DATA.IMG_SIZE, config.DATA.IMG_SIZE)),
-                        transforms.ToTensor(),
-                        transforms.Normalize(mean=0.1354949, std=0.18222201)])
-    elif dataset_name == 'elegans':
-        t = transforms.Compose([transforms.Pad((0, 0, 0, 176), fill = 0, padding_mode = 'constant'),
-                        transforms.Resize((224, 224)),
-                        transforms.ToTensor()])
+        if is_train:
+            if config.DATA.AUGM:
+                            t = transforms.Compose([transforms.ToTensor(),
+                            transforms.RandomRotation(degrees=(0, 10)),
+                            transforms.RandomAdjustSharpness(sharpness_factor=2, p=0.5),
+                            transforms.RandomAutocontrast(p=0.5),])
+            else:
+                t = transforms.Compose([transforms.ToTensor(),])
+                #transforms.Normalize(mean=0.1354949, std=0.18222201)
+        else:
+            t = transforms.Compose([transforms.ToTensor(),])
+
     return t

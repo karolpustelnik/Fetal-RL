@@ -1,0 +1,28 @@
+PARALLEL_TYPE: 'ddp'
+EVAL_MODE: TRUE
+DATA:
+  IMG_SIZE: 512
+  DATASET: fetal
+  BATCH_SIZE: 8
+  PART: 'abdomen'
+  AUGM: False
+  TRAIN_SET: '/data/kpusteln/fetal/standard_plane/class_data/abdomen_val.csv'
+  VAL_SET: '/data/kpusteln/fetal/standard_plane/class_data/abdomen_val.csv'
+MODEL:
+  TYPE: effnet
+  NAME: effnet_cls_abdomen
+  NUM_CLASSES: 3
+  TASK_TYPE: cls
+  AFFIX: .csv
+  LABEL_SMOOTHING: 0.0
+TRAIN:
+  EPOCHS: 90
+  WARMUP_EPOCHS: 5
+  WEIGHT_DECAY: 0.05
+  BASE_LR: 1.25e-3 # 4096 batch-size
+  WARMUP_LR: 1.25e-7
+  MIN_LR: 1.25e-6
+  AUTO_RESUME: FALSE
+AUG:
+  MIXUP: 0.0
+  CUTMIX: 0.0
