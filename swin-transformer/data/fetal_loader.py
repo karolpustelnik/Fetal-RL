@@ -118,7 +118,7 @@ class Fetal_frame(data.Dataset):
 
     def _load_image(self, path):
         try:
-            im = cv2.imread(path)
+            im = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
         except:
             print("ERROR IMG NOT LOADED: ", path)
             random_img = np.random.rand(224, 224, 3) * 255
@@ -139,9 +139,9 @@ class Fetal_frame(data.Dataset):
         measure = torch.tensor(idb[3])
         ps = torch.tensor(idb[4])
         frames_n = torch.tensor(idb[5])
-        measure_normalized = torch.tensor(idb[6])
-        days_normalized = torch.tensor(idb[7])
-        frame_loc = torch.tensor(idb[8])
+        measure_normalized = torch.tensor(idb[6], dtype=torch.float32)
+        days_normalized = torch.tensor(idb[7], dtype=torch.float32)
+        frame_loc = torch.tensor(idb[8], dtype=torch.float32)
         height = torch.tensor(idb[9])
         width = torch.tensor(idb[10])
         padding = A.PadIfNeeded(min_height=512, min_width=512, border_mode=0, value=0, mask_value=0, always_apply=False, p=1.0)
@@ -150,7 +150,7 @@ class Fetal_frame(data.Dataset):
         rescale = A.Resize(int(1.62*height), int(1.62*width))
         images = rescale(image = images)['image']
         images = padding(image=images)['image']
-        assert images.shape == (512, 512, 3)
+        images = np.expand_dims(images, 2)
         if self.transform is not None:
             images = self.transform(images)
         #time = frame_idx.split('_')[2]

@@ -119,9 +119,9 @@ def main(config):
     else:
         lr_scheduler = build_scheduler(config, optimizer, len(data_loader_train))
         
-    normed_weight = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/precision_weights.pt').cuda()
+    #normed_weight = torch.load('/home/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/precision_weights.pt').cuda()
     criterion_cls = torch.nn.CrossEntropyLoss() ## changed
-    criterion_reg = torch.nn.L1Loss() ## changed
+    criterion_reg = torch.nn.MSELoss() ## changed
 
     max_accuracy = 0.0
 
@@ -225,7 +225,6 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
     end = time.time()
     for idx, (images, Class, measure, ps, frames_n, measure_normalized, indexes, days_normalized, frame_loc) in enumerate(data_loader): ## changed
         optimizer.zero_grad()
-        
         if config.PARALLEL_TYPE == 'ddp':
             with torch.autocast(device_type='cuda', dtype=torch.float16):
                 meta = torch.stack((days_normalized, frame_loc), dim = 1).cuda(non_blocking=True)
@@ -281,9 +280,9 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
             
 @torch.no_grad()
 def validate(config, data_loader, model):
-    normed_weight = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/normedWeights.pt').cuda()
+    #normed_weight = torch.load('/home/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/normedWeights.pt').cuda()
     criterion_cls = torch.nn.CrossEntropyLoss() ## changed
-    criterion_reg = torch.nn.L1Loss() ## changed
+    criterion_reg = torch.nn.MSELoss() ## changed
     mae = MeanAbsoluteError().cuda()
     mape = MeanAbsolutePercentageError().cuda()
     rmse = MeanSquaredError(squared = False).cuda()
@@ -303,7 +302,7 @@ def validate(config, data_loader, model):
 
     worst_losses = []
     for idx, (images, Class, measure, ps, frames_n, measure_normalized, indexes, days_normalized, frame_loc) in enumerate(data_loader):
-
+        images = images.to(torch.float32)
         if config.PARALLEL_TYPE == 'ddp':
             #labels = labels.cuda(non_blocking=True)
             #print(labels.shape)
@@ -350,7 +349,7 @@ def validate(config, data_loader, model):
             #ps = ps.cuda(non_blocking=True)
             ps = ps.unsqueeze(1)
             ps = ps.cpu().numpy()
-            scaler = joblib.load('/data/kpusteln/Fetal-RL/data_preparation/scripts/scaler_filename')
+            scaler = joblib.load('/home/kpusteln/Fetal-RL/data_preparation/scripts/scaler_filename')
             if config.DATA.USE_PS:
                 predicted_measure = scaler.inverse_transform(outputs.cpu().numpy()) * ps
             else:
