@@ -121,7 +121,7 @@ def main(config):
         
     #normed_weight = torch.load('/home/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/precision_weights.pt').cuda()
     criterion_cls = torch.nn.CrossEntropyLoss() ## changed
-    criterion_reg = torch.nn.L1Loss() ## changed
+    criterion_reg = torch.nn.MSELoss() if config.MODEL.LOSS == 'L2' else torch.nn.L1Loss()
 
     max_accuracy = 0.0
 
@@ -282,7 +282,7 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
 def validate(config, data_loader, model):
     #normed_weight = torch.load('/home/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/normedWeights.pt').cuda()
     criterion_cls = torch.nn.CrossEntropyLoss() ## changed
-    criterion_reg = torch.nn.L1Loss() ## changed
+    criterion_reg = torch.nn.MSELoss() if config.MODEL.LOSS == 'L2' else torch.nn.L1Loss()
     mae = MeanAbsoluteError().cuda()
     mape = MeanAbsolutePercentageError().cuda()
     rmse = MeanSquaredError(squared = False).cuda()

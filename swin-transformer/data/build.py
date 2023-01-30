@@ -86,14 +86,14 @@ def build_loader(config):
             sampler=sampler_train,
             batch_size=config.DATA.BATCH_SIZE,
             num_workers=config.DATA.NUM_WORKERS,
-            drop_last = False)
+            drop_last = True)
         
         data_loader_val = torch.utils.data.DataLoader(
             dataset_val, 
             sampler = sampler_val,
             batch_size=config.DATA.BATCH_SIZE,
             num_workers=config.DATA.NUM_WORKERS,
-            drop_last=False)
+            drop_last=True)
 
 
     # setup mixup / cutmix

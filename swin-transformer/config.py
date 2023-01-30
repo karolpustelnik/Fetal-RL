@@ -81,7 +81,7 @@ _C.MODEL.AFFIX = '.csv'
 _C.MODEL.DROP_PATH_RATE = 0.1
 # Label Smoothing
 _C.MODEL.LABEL_SMOOTHING = 0.1
-
+_C.MODEL.LOSS = 'L1'
 # Swin Transformer parameters
 _C.MODEL.SWIN = CN()
 _C.MODEL.SWIN.PATCH_SIZE = 4
