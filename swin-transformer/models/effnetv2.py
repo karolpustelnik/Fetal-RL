@@ -96,9 +96,7 @@ class EffnetV2_L_meta(torch.nn.Module):
         #self.model.classifier = torch.nn.Sequential(nn.Dropout(0.4), nn.Linear(1280, self.out_features))
         self.classifier = torch.nn.Sequential(nn.Dropout(0.4), nn.Linear(1280 + 64, self.out_features)) # 1280 + 64 meta feature (days, frame_location)
         self.meta = torch.nn.Sequential(nn.Linear(2, 64),
-                                        nn.BatchNorm1d(64),
-                                        nn.ReLU(),
-                                        nn.Dropout(0.1),)
+                                        nn.ReLU(),)
                                         
     def count_params(self):
         

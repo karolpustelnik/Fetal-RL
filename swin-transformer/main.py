@@ -311,6 +311,7 @@ def validate(config, data_loader, model):
             #with torch.autocast(device_type='cuda', dtype=torch.float16):
                 meta = torch.stack((days_normalized, frame_loc), dim = 1).cuda(non_blocking=True)
                 outputs = model((images, meta)) 
+                print('outputs', outputs)
             
         elif config.PARALLEL_TYPE == 'model_parallel':
             #labels = labels.to('cuda:1')
@@ -347,6 +348,10 @@ def validate(config, data_loader, model):
             measures_train = measure_normalized if config.DATA.IMG_SCALING else measure_scaled
             measures_train = measures_train.unsqueeze(0).cuda(non_blocking=True)
             measures_train = measures_train.reshape(-1, 1)
+            print('measure train shape', measures_train.shape)
+            #print('outputs shape', outputs.shape)
+            #print('outputs', outputs)
+            print('measures train', measures_train)
             #with torch.autocast(device_type='cuda', dtype=torch.float16):
             loss_reg = criterion_reg(outputs, measures_train)
             #ps = ps.cuda(non_blocking=True)
@@ -401,6 +406,7 @@ def validate(config, data_loader, model):
                     f'mae {mae_meter.val:.3f} ({mae_meter.avg:.3f})\t' 
                     f'mape {mape_meter.val:.3f} ({mape_meter.avg:.3f})\t' 
                     f'rmse {rmse_meter.val:.3f} ({rmse_meter.avg:.3f})\t')
+                
     if config.MODEL.TASK_TYPE == 'cls':
         print('Finished validation! Results:')
         logger.info(f' * Acc@1 {acc1_meter.avg:.3f}')
@@ -408,12 +414,21 @@ def validate(config, data_loader, model):
         logger.info(f' * recall {recall_meter.avg:.3f}')
         logger.info(f' * precision {precision_meter.avg:.3f}')
         logger.info(f' * cls loss {loss_meter_cls.avg:.3f}')
+        wandb.log({"Val Loss": loss_meter_cls.avg,})
+        wandb.log({"Val Acc": acc1_meter.avg,})
+        wandb.log({"Val F1": f1_score_meter.avg,})
+        wandb.log({"Val Recall": recall_meter.avg,})
+        wandb.log({"Val Precision": precision_meter.avg,})
     elif config.MODEL.TASK_TYPE == 'reg':
         print('Finished validation! Results:')
         logger.info(f' * mae {mae_meter.avg:.3f}')
         logger.info(f' * mape {mape_meter.avg:.3f}')
         logger.info(f' * rmse {rmse_meter.avg:.3f}')
         logger.info(f' * Reg loss {loss_meter_reg.avg:.3f}')
+        wandb.log({"Val Loss": loss_meter_reg.avg,})
+        wandb.log({"Val MAE": mae_meter.avg,})
+        wandb.log({"Val MAPE": mape_meter.avg,})
+        wandb.log({"Val RMSE": rmse_meter.avg,})
     
     if config.MODEL.TASK_TYPE == 'cls':
         return acc1_meter.avg, f1_score_meter.avg, recall_meter.avg, precision_meter.avg
