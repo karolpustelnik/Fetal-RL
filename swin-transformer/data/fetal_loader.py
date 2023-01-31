@@ -144,6 +144,7 @@ class Fetal_frame(data.Dataset):
         frame_loc = torch.tensor(idb[8], dtype=torch.float32)
         height = torch.tensor(idb[9])
         width = torch.tensor(idb[10])
+        
         padding = A.PadIfNeeded(min_height=512, min_width=512, border_mode=0, value=0, mask_value=0, always_apply=False, p=1.0)
         images = self._load_image(self.data_path  + frame_idx + '.png')
         #if self.transform is not None:

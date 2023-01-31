@@ -223,7 +223,7 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
     
     start = time.time()
     end = time.time()
-    for idx, (images, Class, measure, ps, frames_n, measure_normalized, indexes, days_normalized, frame_loc) in enumerate(data_loader): ## changed
+    for idx, (images, Class, measure, ps, frames_n, measure_normalized, indexes, days_normalized, frame_loc, ) in enumerate(data_loader): ## changed
         optimizer.zero_grad()
         if config.PARALLEL_TYPE == 'ddp':
             with torch.autocast(device_type='cuda', dtype=torch.float16):
@@ -376,7 +376,7 @@ def validate(config, data_loader, model):
             mae_meter.update(mae_value)
             mape_meter.update(mape_value)
             rmse_meter.update(rmse_value)
-            loss_reg.update(loss_reg.item())
+            loss_meter_reg.update(loss_reg.item())
             
             
 
