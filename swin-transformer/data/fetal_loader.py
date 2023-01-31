@@ -108,13 +108,14 @@ class Fetal_frame_eval(data.Dataset):
     
         
 class Fetal_frame(data.Dataset):
-    def __init__(self, root, ann_path, transform=None, target_transform=None):
+    def __init__(self, root, ann_path, transform=None, target_transform=None, img_scaling = False):
 
         self.data_path = root
         self.ann_path = ann_path
         self.transform = transform
         self.target_transform = target_transform
         self.database = pd.read_csv(self.ann_path)
+        self.img_scaling = img_scaling
 
     def _load_image(self, path):
         try:
@@ -139,24 +140,33 @@ class Fetal_frame(data.Dataset):
         measure = torch.tensor(idb[3])
         ps = torch.tensor(idb[4])
         frames_n = torch.tensor(idb[5])
-        measure_normalized = torch.tensor(idb[6], dtype=torch.float32)
+        measure_scaled = torch.tensor(idb[6], dtype=torch.float32)
         days_normalized = torch.tensor(idb[7], dtype=torch.float32)
         frame_loc = torch.tensor(idb[8], dtype=torch.float32)
         height = torch.tensor(idb[9])
         width = torch.tensor(idb[10])
-        
-        padding = A.PadIfNeeded(min_height=512, min_width=512, border_mode=0, value=0, mask_value=0, always_apply=False, p=1.0)
+        measure_normalized = torch.tensor(idb[13], dtype=torch.float32)
         images = self._load_image(self.data_path  + frame_idx + '.png')
-        #if self.transform is not None:
-        rescale = A.Resize(int(1.62*height), int(1.62*width))
-        images = rescale(image = images)['image']
-        images = padding(image=images)['image']
-        images = np.expand_dims(images, 2)
+        if self.img_scaling:
+            padding = A.PadIfNeeded(min_height=512, min_width=512, border_mode=0, value=0, mask_value=0, always_apply=False, p=1.0)
+            rescale = A.Resize(int(1.62*height), int(1.62*width))
+            images = rescale(image = images)['image']
+            images = padding(image=images)['image']
+            images = np.expand_dims(images, 2)
+            t = transforms.Compose([transforms.ToTensor(),])
+            images = t(images)
+        else:
+            images = np.expand_dims(images, 2)
+            t = transforms.Compose([transforms.ToTensor(),
+            transforms.Resize((450, 600)),
+            transforms.Pad((0, 0, 0, 150), fill = 0, padding_mode = 'constant'),
+            transforms.Resize((512, 512)),
+            transforms.Normalize(mean=0.1354949, std=0.18222201)])
+            images = t(images)
         if self.transform is not None:
             images = self.transform(images)
-        #time = frame_idx.split('_')[2]
-        #time = int(time)
-        return images, Class, measure, ps, frames_n, measure_normalized, index, days_normalized, frame_loc
+
+        return images, Class, measure, ps, frames_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized
 
     def __len__(self):
         return len(self.database)

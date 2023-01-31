@@ -33,7 +33,7 @@ _C.DATA.DATASET = 'imagenet'
 _C.DATA.VIDEOS_TRAIN = 'videos_train'
 _C.DATA.VIDEOS_VAL = 'videos_val'
 
-_C.DATA.USE_PS = True
+_C.DATA.IMG_SCALING = True
 # whether use augmentation
 
 _C.DATA.AUGM = True

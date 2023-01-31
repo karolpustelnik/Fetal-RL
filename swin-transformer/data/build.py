@@ -122,11 +122,11 @@ def build_dataset(is_train, config):
             videos_path = config.DATA.VIDEOS_VAL
             #videos_path = f'/data/kpusteln/Fetal-RL/data_preparation/data_biometry/videos_val_{part}.csv'
     if config.PARALLEL_TYPE == 'model_parallel':
-        dataset = Fetal_frame(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform)
+        dataset = Fetal_frame(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform, img_scaling = config.DATA.IMG_SCALING)
         nb_classes = config.MODEL.NUM_CLASSES
         
     elif config.PARALLEL_TYPE == 'ddp':
-            dataset = Fetal_frame(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform)
+            dataset = Fetal_frame(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform, img_scaling = config.DATA.IMG_SCALING)
             nb_classes = config.MODEL.NUM_CLASSES
     if config.TRAIN.AUTO_RESUME == False:
             dataset = Fetal_frame_eval(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform)
@@ -141,14 +141,14 @@ def build_transform(is_train, config, dataset_name):
     if dataset_name == 'fetal':
         if is_train:
             if config.DATA.AUGM:
-                            t = transforms.Compose([transforms.ToTensor(),
+                            t = transforms.Compose([
                             transforms.RandomRotation(degrees=(0, 10)),
                             transforms.RandomAdjustSharpness(sharpness_factor=2, p=0.5),
                             transforms.RandomAutocontrast(p=0.5),])
             else:
-                t = transforms.Compose([transforms.ToTensor(),])
+                t = None
                 #transforms.Normalize(mean=0.1354949, std=0.18222201)
         else:
-            t = transforms.Compose([transforms.ToTensor(),])
+            t = None
 
     return t

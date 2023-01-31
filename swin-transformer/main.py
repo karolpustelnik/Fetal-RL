@@ -181,11 +181,11 @@ def main(config):
         for epoch in range(config.TRAIN.START_EPOCH, config.TRAIN.EPOCHS):
             data_loader_train.sampler.set_epoch(epoch) if config.PARALLEL_TYPE == 'ddp' else None
 
-            train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader_train, optimizer, epoch, mixup_fn, lr_scheduler,
-                            loss_scaler)
-            if dist.get_rank() == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
-                save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, loss_scaler,
-                                logger)
+            #train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader_train, optimizer, epoch, mixup_fn, lr_scheduler,
+            ##                loss_scaler)
+            #if dist.get_rank() == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
+            #    save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, loss_scaler,
+            #                    logger)
             if config.MODEL.TASK_TYPE == 'cls':
                 acc1_meter, f1_score_meter, recall_meter, precision_meter = validate(config, data_loader_val, model)
                 wandb.log({'val_acc': acc1_meter, 'val_f1_score': f1_score_meter, 'val_recall': recall_meter, 'val_precision': precision_meter}, step = epoch)
@@ -223,7 +223,7 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
     
     start = time.time()
     end = time.time()
-    for idx, (images, Class, measure, ps, frames_n, measure_normalized, indexes, days_normalized, frame_loc, ) in enumerate(data_loader): ## changed
+    for idx, (images, Class, measure, ps, frames_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized) in enumerate(data_loader): ## changed
         optimizer.zero_grad()
         if config.PARALLEL_TYPE == 'ddp':
             with torch.autocast(device_type='cuda', dtype=torch.float16):
@@ -233,19 +233,21 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
             #labels = labels.to('cuda:1')
             print(f'images shape before forward: {images.shape}')
             print(f'frames_n shape before forward: {frames_n.shape}')
-            outputs = model((images, frames_n))
+            with torch.autocast(device_type='cuda', dtype=torch.float16):
+                outputs = model((images, frames_n))
 
         
         if config.MODEL.TASK_TYPE == 'cls':
             Class = Class.cuda(non_blocking=True)
-
-            loss = criterion_cls(outputs, Class) ## changed
+            with torch.autocast(device_type='cuda', dtype=torch.float16):      
+                loss = criterion_cls(outputs, Class) ## changed
             
         elif config.MODEL.TASK_TYPE == 'reg':
-            measure_normalized = measure_normalized.unsqueeze(0).cuda(non_blocking=True)
-            measure_normalized = measure_normalized.reshape(-1, 1)
+            measures_train = measure_normalized if config.DATA.IMG_SCALING else measure_scaled
+            measures_train = measures_train.unsqueeze(0).cuda(non_blocking=True)
+            measures_train = measures_train.reshape(-1, 1)
             with torch.autocast(device_type='cuda', dtype=torch.float16):
-                loss = criterion_reg(outputs, measure_normalized)
+                loss = criterion_reg(outputs, measures_train)
         
         loss.backward()
         optimizer.step()
@@ -301,7 +303,7 @@ def validate(config, data_loader, model):
     rmse_meter = AverageMeter()
 
     worst_losses = []
-    for idx, (images, Class, measure, ps, frames_n, measure_normalized, indexes, days_normalized, frame_loc) in enumerate(data_loader):
+    for idx, (images, Class, measure, ps, frames_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized) in enumerate(data_loader):
         images = images.to(torch.float32)
         if config.PARALLEL_TYPE == 'ddp':
             #labels = labels.cuda(non_blocking=True)
@@ -342,18 +344,20 @@ def validate(config, data_loader, model):
             f1_score_meter.update(f1.item())
             
         elif config.MODEL.TASK_TYPE == 'reg':
-            measure_normalized = measure_normalized.unsqueeze(0).cuda(non_blocking=True)
-            measure_normalized = measure_normalized.reshape(-1, 1)
+            measures_train = measure_normalized if config.DATA.IMG_SCALING else measure_scaled
+            measures_train = measures_train.unsqueeze(0).cuda(non_blocking=True)
+            measures_train = measures_train.reshape(-1, 1)
             with torch.autocast(device_type='cuda', dtype=torch.float16):
-                loss_reg = criterion_reg(outputs, measure_normalized)
+                loss_reg = criterion_reg(outputs, measures_train)
             #ps = ps.cuda(non_blocking=True)
             ps = ps.unsqueeze(1)
             ps = ps.cpu().numpy()
-            scaler = joblib.load('/data/kpusteln/Fetal-RL/data_preparation/scripts/scaler_filename')
-            if config.DATA.USE_PS:
-                predicted_measure = scaler.inverse_transform(outputs.cpu().numpy()) * ps
-            else:
+            if config.DATA.IMG_SCALING:
+                scaler = joblib.load('/data/kpusteln/Fetal-RL/data_preparation/scripts/normalizer_measure')
                 predicted_measure = scaler.inverse_transform(outputs.cpu().numpy())
+            else:
+                scaler = joblib.load('/data/kpusteln/Fetal-RL/data_preparation/scripts/normalizer_measure_scaled')
+                predicted_measure = scaler.inverse_transform(outputs.cpu().numpy()) * ps
             predicted_measure = torch.from_numpy(predicted_measure)
             predicted_measure = predicted_measure.cuda(non_blocking=True)
             #predicted_measure = outputs * max_measure * ps

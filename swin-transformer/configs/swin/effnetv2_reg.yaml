@@ -4,17 +4,17 @@ DATA:
   DATASET: fetal
   BATCH_SIZE: 8
   AUGM: True
-  USE_PS: False
-  TRAIN_SET: '/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_train_reg.csv'
-  VAL_SET: '/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_test_reg.csv'
+  IMG_SCALING: False
+  TRAIN_SET: '/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/biometry_train_scaled_size.csv'
+  VAL_SET: '/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/biometry_val_scaled_size.csv'
 MODEL:
   TYPE: effnetv2_meta
-  NAME: effnetv2_reg_meta_l1
+  NAME: effnetv2_reg_meta_l2
   NUM_CLASSES: 1
   TASK_TYPE: reg
   AFFIX: .csv
   LABEL_SMOOTHING: 0.0
-  LOSS: 'L1'
+  LOSS: 'L2'
 TRAIN:
   EPOCHS: 90
   WARMUP_EPOCHS: 5
