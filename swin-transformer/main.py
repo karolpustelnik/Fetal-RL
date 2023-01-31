@@ -181,11 +181,11 @@ def main(config):
         for epoch in range(config.TRAIN.START_EPOCH, config.TRAIN.EPOCHS):
             data_loader_train.sampler.set_epoch(epoch) if config.PARALLEL_TYPE == 'ddp' else None
 
-            #train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader_train, optimizer, epoch, mixup_fn, lr_scheduler,
-            ##                loss_scaler)
-            #if dist.get_rank() == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
-            #    save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, loss_scaler,
-            #                    logger)
+            train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader_train, optimizer, epoch, mixup_fn, lr_scheduler,
+                            loss_scaler)
+            if dist.get_rank() == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
+                save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, loss_scaler,
+                                logger)
             if config.MODEL.TASK_TYPE == 'cls':
                 acc1_meter, f1_score_meter, recall_meter, precision_meter = validate(config, data_loader_val, model)
                 wandb.log({'val_acc': acc1_meter, 'val_f1_score': f1_score_meter, 'val_recall': recall_meter, 'val_precision': precision_meter}, step = epoch)
@@ -304,17 +304,17 @@ def validate(config, data_loader, model):
 
     worst_losses = []
     for idx, (images, Class, measure, ps, frames_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized) in enumerate(data_loader):
-        images = images.to(torch.float32)
+        #images = images.to(torch.float32)
         if config.PARALLEL_TYPE == 'ddp':
             #labels = labels.cuda(non_blocking=True)
             #print(labels.shape)
-            with torch.autocast(device_type='cuda', dtype=torch.float16):
+            #with torch.autocast(device_type='cuda', dtype=torch.float16):
                 meta = torch.stack((days_normalized, frame_loc), dim = 1).cuda(non_blocking=True)
                 outputs = model((images, meta)) 
             
         elif config.PARALLEL_TYPE == 'model_parallel':
             #labels = labels.to('cuda:1')
-            with torch.autocast(device_type='cuda', dtype=torch.float16):
+            #with torch.autocast(device_type='cuda', dtype=torch.float16):
                 outputs = model((images, frames_n))
 
         # measure accuracy and record loss
@@ -347,8 +347,8 @@ def validate(config, data_loader, model):
             measures_train = measure_normalized if config.DATA.IMG_SCALING else measure_scaled
             measures_train = measures_train.unsqueeze(0).cuda(non_blocking=True)
             measures_train = measures_train.reshape(-1, 1)
-            with torch.autocast(device_type='cuda', dtype=torch.float16):
-                loss_reg = criterion_reg(outputs, measures_train)
+            #with torch.autocast(device_type='cuda', dtype=torch.float16):
+            loss_reg = criterion_reg(outputs, measures_train)
             #ps = ps.cuda(non_blocking=True)
             ps = ps.unsqueeze(1)
             ps = ps.cpu().numpy()
