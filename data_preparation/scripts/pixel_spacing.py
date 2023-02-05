@@ -75,7 +75,7 @@ class Fetal(data.Dataset):
 t = transforms.Compose([transforms.ToTensor(),])
 
 fetal = Fetal(root = '/data/kpusteln/fetal/fetal_extracted/', 
-              ann_path = f'/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_val.csv', 
+              ann_path = f'/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_train.csv', 
               transform=t)
 
 batch_size = 1
@@ -112,7 +112,7 @@ for img, label, index, video, measure, pixel_spacing, length, measure_scaled, da
     widths.extend(width * pixel_spacing)
     heights.extend(height * pixel_spacing)
     scale = width/512 #img size 512
-    pixel_spacing = pixel_spacing/scale
+    pixel_spacing = pixel_spacing
     label = label.numpy()
     measure = measure.numpy()
     length = length.numpy()
@@ -136,7 +136,7 @@ femur_bioemtry_new = pd.DataFrame({'index': indexes, 'Class': labels, 'video': v
                                    'ps': pixel_spacings, 'frames_n': lens, 'measure_scaled': measure_scaled_list, 
                                    'days': days_list, 'frame_loc': frame_loc_list, 'height': heights, 'width': widths,
                                    'height_org': heights_org, 'width_org': widths_org})
-femur_bioemtry_new.to_csv('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/biometry_val_scaled_size.csv', index=False)
+femur_bioemtry_new.to_csv('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/biometry_train_scaled_size.csv', index=False)
 print('Finished calculating pixel spacing!')
 
 

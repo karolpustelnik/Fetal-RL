@@ -228,7 +228,10 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
         if config.PARALLEL_TYPE == 'ddp':
             with torch.autocast(device_type='cuda', dtype=torch.float16):
                 meta = torch.stack((days_normalized, frame_loc), dim = 1).cuda(non_blocking=True)
-                outputs = model((images, meta)) 
+                if config.MODEL.TYPE == 'effnetv2_meta':
+                    outputs = model((images, meta)) 
+                else:
+                    outputs = model(images)
         elif config.PARALLEL_TYPE == 'model_parallel':
             #labels = labels.to('cuda:1')
             print(f'images shape before forward: {images.shape}')
@@ -310,7 +313,10 @@ def validate(config, data_loader, model):
             #print(labels.shape)
             #with torch.autocast(device_type='cuda', dtype=torch.float16):
                 meta = torch.stack((days_normalized, frame_loc), dim = 1).cuda(non_blocking=True)
-                outputs = model((images, meta)) 
+                if config.MODEL.TYPE == 'effnetv2_meta':
+                    outputs = model((images, meta)) 
+                else:
+                    outputs = model(images)
                 print('outputs', outputs)
             
         elif config.PARALLEL_TYPE == 'model_parallel':

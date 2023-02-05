@@ -9,7 +9,7 @@ DATA:
   VAL_SET: '/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/biometry_val_scaled_size_subset.csv'
 MODEL:
   TYPE: effnetv2_meta
-  NAME: effnetv2_reg_meta_l2_img_scaling
+  NAME: effnetv2_reg_l2_img_scaling
   NUM_CLASSES: 1
   TASK_TYPE: reg
   AFFIX: .csv
