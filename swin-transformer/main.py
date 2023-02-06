@@ -71,6 +71,8 @@ def parse_option():
 
     # distributed training
     parser.add_argument("--local_rank", type=int, required=False, help='local rank for DistributedDataParallel')
+    parser.add_argument("--train_path", type=str, help='path to training data')
+    parser.add_argument("--val_path", type=str, help='path to validation data')
     parser.add_argument("--path_prefix", type=str, help='path prefix eq. /home/karol')
     # for acceleration
     parser.add_argument('--fused_window_process', action='store_true', help='Fused window shift & window partition, similar for reversed part.')
@@ -350,10 +352,8 @@ def validate(config, data_loader, model):
             measures_train = measure_normalized if config.DATA.IMG_SCALING else measure_scaled
             measures_train = measures_train.unsqueeze(0).cuda(non_blocking=True)
             measures_train = measures_train.reshape(-1, 1)
-            print('measure train shape', measures_train.shape)
             #print('outputs shape', outputs.shape)
             #print('outputs', outputs)
-            print('measures train', measures_train)
             #with torch.autocast(device_type='cuda', dtype=torch.float16):
             loss_reg = criterion_reg(outputs, measures_train)
             #ps = ps.cuda(non_blocking=True)
@@ -361,10 +361,10 @@ def validate(config, data_loader, model):
             ps = ps.cpu().numpy()
             prefix = config.DATA.PATH_PREFIX
             if config.DATA.IMG_SCALING:
-                scaler = joblib.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/scripts/normalizer_measure')
+                scaler = joblib.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/normalizer_measure_img_scaling')
                 predicted_measure = scaler.inverse_transform(outputs.cpu().numpy())
             else:
-                scaler = joblib.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/scripts/normalizer_measure')
+                scaler = joblib.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/normalizer_measure')
                 predicted_measure = scaler.inverse_transform(outputs.cpu().numpy()) * ps
             predicted_measure = torch.from_numpy(predicted_measure)
             predicted_measure = predicted_measure.cuda(non_blocking=True)
@@ -374,10 +374,6 @@ def validate(config, data_loader, model):
             mae_value = mae(predicted_measure, measure)
             mape_value = mape(predicted_measure, measure)
             rmse_value = rmse(predicted_measure, measure)
-            print(f'Predicted measure tensor: {predicted_measure}')
-            print(f'Measure tensor: {measure}')
-            
-            print(f"Predicted measure: {predicted_measure[0]}, real measure: {measure[0]}, mae: {mae_value}, mape: {mape_value}, rmse: {rmse_value}")
             
             if config.PARALLEL_TYPE == 'ddp':
                 loss_reg = reduce_tensor(loss_reg)
@@ -395,6 +391,7 @@ def validate(config, data_loader, model):
 
         if idx % config.PRINT_FREQ == 0:
             if config.MODEL.TASK_TYPE == 'cls':
+                
                 logger.info(
                     f'Test: [{idx}/{len(data_loader)}]\t'
                     f'cls Loss {loss_meter_cls.val:.4f} ({loss_meter_cls.avg:.4f})\t' 
@@ -403,6 +400,7 @@ def validate(config, data_loader, model):
                     f'recall {recall_meter.val:.3f} ({recall_meter.avg:.3f})\t' 
                     f'precision {precision_meter.val:.3f} ({precision_meter.avg:.3f})\t')
             elif config.MODEL.TASK_TYPE == 'reg':
+                print(f"Example measure prediction: {predicted_measure[0]}, real measure: {measure[0]}, mae: {mae_value}, mape: {mape_value}, rmse: {rmse_value}")
                 logger.info(
                     f'Test: [{idx}/{len(data_loader)}]\t'
                     f'reg Loss {loss_meter_reg.val:.4f} ({loss_meter_reg.avg:.4f})\t' 

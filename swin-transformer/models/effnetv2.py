@@ -94,13 +94,13 @@ class EffnetV2_L_meta(torch.nn.Module):
         self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
         self.model.classifier = torch.nn.Identity()
         #self.model.classifier = torch.nn.Sequential(nn.Dropout(0.4), nn.Linear(1280, self.out_features))
-        self.classifier = torch.nn.Sequential(nn.Linear(1280 + 64, 512),
+        self.classifier = torch.nn.Sequential(nn.Linear(1280 + 4, 512),
                                              nn.BatchNorm1d(512),
                                              torch.nn.SiLU(),
                                              nn.Dropout(self.dropout),
                                              torch.nn.Linear(512, out_features = self.out_features),) # 1280 + 64 meta feature (days, frame_location)
-        self.meta = torch.nn.Sequential(nn.Linear(2, 64),
-                                        nn.BatchNorm1d(64),
+        self.meta = torch.nn.Sequential(nn.Linear(2, 4),
+                                        nn.BatchNorm1d(4),
                                         nn.SiLU(),
                                         nn.Dropout(self.dropout))
                                         

@@ -287,6 +287,10 @@ def update_config(config, args):
         config.DATA.BATCH_SIZE = args.batch_size
     if args.data_path:
         config.DATA.DATA_PATH = args.data_path
+    if args.train_path:
+        config.DATA.TRAIN_SET = args.train_path
+    if args.val_path:
+        config.DATA.VAL_SET = args.val_path
     if args.zip:
         config.DATA.ZIP_MODE = True
     if args.cache_mode:

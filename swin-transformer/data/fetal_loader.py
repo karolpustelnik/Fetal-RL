@@ -22,6 +22,11 @@ warnings.filterwarnings("ignore", "(Possibly )?corrupt EXIF data", UserWarning)
 5 - femur non standard plane
 6 - femur standard plane
 """
+
+def clamp(num, min_value, max_value):
+   return max(min(num, max_value), min_value)
+
+
 class Fetal_frame_eval(data.Dataset):
     def __init__(self, root, ann_path, transform=None, target_transform=None):
 
@@ -116,6 +121,7 @@ class Fetal_frame(data.Dataset):
         self.target_transform = target_transform
         self.database = pd.read_csv(self.ann_path)
         self.img_scaling = img_scaling
+        
 
     def _load_image(self, path):
         try:
@@ -147,9 +153,12 @@ class Fetal_frame(data.Dataset):
         width = torch.tensor(idb[10])
         measure_normalized = torch.tensor(idb[13], dtype=torch.float32)
         images = self._load_image(self.data_path  + frame_idx + '.png')
+        
+        new_height = clamp(int(height*2.161191086437513), 0, 512)
+        new_width = clamp(int(width*2.161191086437513), 0, 512)
         if self.img_scaling:
             padding = A.PadIfNeeded(min_height=512, min_width=512, border_mode=0, value=0, mask_value=0, always_apply=False, p=1.0)
-            rescale = A.Resize(int(1.62*height), int(1.62*width))
+            rescale = A.Resize(new_height, new_width)
             images = rescale(image = images)['image']
             images = padding(image=images)['image']
             images = np.expand_dims(images, 2)
