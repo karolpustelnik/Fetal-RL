@@ -54,7 +54,7 @@ def build_model(config):
         regresor = EffnetV2_L(out_features = 1)
         model = (detector, regresor)
     elif model_type == 'effnetv2_meta':
-        model = EffnetV2_L_meta(out_features = config.MODEL.NUM_CLASSES)
+        model = EffnetV2_L_meta(out_features = config.MODEL.NUM_CLASSES, dropout= config.MODEL.DROP_RATE)
     elif model_type == 'caformer':
         model = CA_former(out_features = config.MODEL.NUM_CLASSES)
     return model

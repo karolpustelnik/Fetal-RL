@@ -85,9 +85,9 @@ def parse_option():
 
 def main(config):
     local_rank = int(os.environ["LOCAL_RANK"])
-    os.environ["WANDB_RUN_GROUP"] = "experiment-" + wandb.util.generate_id()#WANDB
+    os.environ["WANDB_RUN_GROUP"] = config.MODEL.NAME #WANDB
     print('Initializing wandb logger...')#WANDB
-    wandb.init(project="Fetal-Multimodal", name = config.MODEL.NAME)#WANDB
+    wandb.init(project="Fetal-Multimodal")#WANDB
     dataset_train, dataset_val, data_loader_train, data_loader_val, mixup_fn = build_loader(config)
 
     logger.info(f"Creating model:{config.MODEL.TYPE}/{config.MODEL.NAME}")

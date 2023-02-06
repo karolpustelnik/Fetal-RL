@@ -83,10 +83,11 @@ class EffnetV2_L_pos_encoding(torch.nn.Module):
 
 
 class EffnetV2_L_meta(torch.nn.Module):
-    def __init__(self, out_features = 7, in_channels = 1):
+    def __init__(self, out_features = 7, in_channels = 1, dropout = 0.4):
         super().__init__()
         
         
+        self.dropout = dropout
         self.out_features = out_features
         self.in_channels = in_channels
         self.model = efficientnet_v2_l(weights = 'EfficientNet_V2_L_Weights.IMAGENET1K_V1')
@@ -96,12 +97,12 @@ class EffnetV2_L_meta(torch.nn.Module):
         self.classifier = torch.nn.Sequential(nn.Linear(1280 + 64, 512),
                                              nn.BatchNorm1d(512),
                                              torch.nn.SiLU(),
-                                             nn.Dropout(0.2),
+                                             nn.Dropout(self.dropout),
                                              torch.nn.Linear(512, out_features = self.out_features),) # 1280 + 64 meta feature (days, frame_location)
         self.meta = torch.nn.Sequential(nn.Linear(2, 64),
                                         nn.BatchNorm1d(64),
                                         nn.SiLU(),
-                                        nn.Dropout(0.1))
+                                        nn.Dropout(self.dropout))
                                         
     def count_params(self):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
