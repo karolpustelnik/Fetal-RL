@@ -27,7 +27,6 @@ class EffnetV2_L(torch.nn.Module):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
         
     def forward(self, x):
-        
         return self.model(x)
 
 
@@ -105,7 +104,6 @@ class EffnetV2_L_meta(torch.nn.Module):
                                         nn.Dropout(0.1))
                                         
     def count_params(self):
-        
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
     
     def forward(self, x):

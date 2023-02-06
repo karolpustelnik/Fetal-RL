@@ -22,7 +22,7 @@ _C.DATA = CN()
 _C.DATA.BATCH_SIZE = 128
 # Path to dataset, could be overwritten by command line argument
 _C.DATA.DATA_PATH = ''
-
+_C.DATA.PATH_PREFIX = ''
 # train set path
 _C.DATA.TRAIN_SET = 'train'
 # val set path
@@ -297,6 +297,8 @@ def update_config(config, args):
         config.MODEL.RESUME = args.resume
     if args.accumulation_steps:
         config.TRAIN.ACCUMULATION_STEPS = args.accumulation_steps
+    if args.path_prefix:
+        config.DATA.PATH_PREFIX = args.path_prefix
     if args.use_checkpoint:
         config.TRAIN.USE_CHECKPOINT = True
     if args.amp_opt_level:

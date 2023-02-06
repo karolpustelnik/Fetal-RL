@@ -71,10 +71,9 @@ def parse_option():
 
     # distributed training
     parser.add_argument("--local_rank", type=int, required=False, help='local rank for DistributedDataParallel')
-
+    parser.add_argument("--path_prefix", type=str, help='path prefix eq. /home/karol')
     # for acceleration
     parser.add_argument('--fused_window_process', action='store_true', help='Fused window shift & window partition, similar for reversed part.')
-
     args, unparsed = parser.parse_known_args()
 
     config = get_config(args)
@@ -103,8 +102,6 @@ def main(config):
         model.cuda()
     
     model_without_ddp = model
-    
-
     optimizer = build_optimizer(config, model)
     print('Optimizer built!')
     print(f'Local rank from environment: {local_rank}')
@@ -124,7 +121,6 @@ def main(config):
     criterion_reg = torch.nn.MSELoss() if config.MODEL.LOSS == 'L2' else torch.nn.L1Loss()
 
     max_accuracy = 0.0
-
     if config.TRAIN.AUTO_RESUME:
         resume_file = auto_resume_helper(config.OUTPUT)
         if resume_file:
@@ -363,11 +359,12 @@ def validate(config, data_loader, model):
             #ps = ps.cuda(non_blocking=True)
             ps = ps.unsqueeze(1)
             ps = ps.cpu().numpy()
+            prefix = config.DATA.PATH_PREFIX
             if config.DATA.IMG_SCALING:
-                scaler = joblib.load('/data/kpusteln/Fetal-RL/data_preparation/scripts/normalizer_measure')
+                scaler = joblib.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/scripts/normalizer_measure')
                 predicted_measure = scaler.inverse_transform(outputs.cpu().numpy())
             else:
-                scaler = joblib.load('/data/kpusteln/Fetal-RL/data_preparation/scripts/normalizer_measure_scaled')
+                scaler = joblib.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/scripts/normalizer_measure')
                 predicted_measure = scaler.inverse_transform(outputs.cpu().numpy()) * ps
             predicted_measure = torch.from_numpy(predicted_measure)
             predicted_measure = predicted_measure.cuda(non_blocking=True)
