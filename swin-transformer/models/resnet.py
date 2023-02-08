@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+import math
 
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
            'resnet152', 'resnext50_32x4d', 'resnext101_32x8d',
@@ -194,20 +194,17 @@ class ResNet(nn.Module):
         x = self.relu(x)
         x = self.maxpool(x)
         x = self.layer1(x)
-        torch.save(x, 'feature_map_layer1_34.pt')
         x = self.layer2(x)
-        torch.save(x, 'feature_map_layer2_34.pt')
         x = self.layer3(x)
-        torch.save(x, 'feature_map_layer3_34.pt')
         x = self.layer4(x)
-        torch.save(x, 'feature_map_layer4_34.pt')
         print(f'Feature map resnet: {x.shape}')
         #feature_map = x.reshape(1, 512, 49)
         #print(f'Feature map resnet reshape: {feature_map.shape}')
         #y, A = self.attention_mechanism(feature_map.squeeze(0))
        # print(y.shape)
        # print(A.shape)
-        x = self.avgpool(x)
+        #x = self.avgpool(x)
+        torch.nn.MultiheadAttention(49, batch_first=True, num_heads=1)
         print(f'Feature map after avg pooling resnet: {x.shape}')
         x = torch.flatten(x, 1)
         print(f' Feature map after flatten: {x.shape}')
@@ -222,8 +219,8 @@ class ResNet(nn.Module):
 
 def _resnet(arch, block, layers, pretrained, progress, **kwargs):
     model = ResNet(block, layers, **kwargs)
-    if pretrained:
-        model.load_state_dict(torch.load('/data/kpusteln/resnet34-b627a593.pth'))
+    # if pretrained:
+    #     model.load_state_dict(torch.load('/data/kpusteln/resnet34-b627a593.pth'))
     return model
 
 
@@ -437,15 +434,90 @@ class ResnetABMIL(nn.Module):
         #pred = self.classifier(x)
         return x, A
     
-    
-import torchvision
 
+import numpy as np
+import torch
+from torch import nn
+from torch.nn import init
+
+
+
+class ChannelAttention(nn.Module):
+    def __init__(self,channel,reduction=16):
+        super().__init__()
+        self.maxpool=nn.AdaptiveMaxPool2d(1)
+        self.avgpool=nn.AdaptiveAvgPool2d(1)
+        self.se=nn.Sequential(
+            nn.Conv2d(channel,channel//reduction,1,bias=False),
+            nn.ReLU(),
+            nn.Conv2d(channel//reduction,channel,1,bias=False)
+        )
+        self.sigmoid=nn.Sigmoid()
+    
+    def forward(self, x) :
+        max_result=self.maxpool(x)
+        avg_result=self.avgpool(x)
+        max_out=self.se(max_result)
+        avg_out=self.se(avg_result)
+        output=self.sigmoid(max_out+avg_out)
+        return output
+
+class SpatialAttention(nn.Module):
+    def __init__(self,kernel_size=7):
+        super().__init__()
+        self.conv=nn.Conv2d(2,1,kernel_size=kernel_size,padding=kernel_size//2)
+        self.sigmoid=nn.Sigmoid()
+    
+    def forward(self, x) :
+        max_result,_=torch.max(x,dim=1,keepdim=True)
+        avg_result=torch.mean(x,dim=1,keepdim=True)
+        result=torch.cat([max_result,avg_result],1)
+        output=self.conv(result)
+        output=self.sigmoid(output)
+        return output
+
+
+
+class CBAMBlock(nn.Module):
+
+    def __init__(self, channel=512,reduction=16,kernel_size=49):
+        super().__init__()
+        self.ca=ChannelAttention(channel=channel,reduction=reduction)
+        self.sa=SpatialAttention(kernel_size=kernel_size)
+
+
+    def init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                init.kaiming_normal_(m.weight, mode='fan_out')
+                if m.bias is not None:
+                    init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm2d):
+                init.constant_(m.weight, 1)
+                init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                init.normal_(m.weight, std=0.001)
+                if m.bias is not None:
+                    init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        b, c, _, _ = x.size()
+        residual=x
+        out=x*self.ca(x)
+        out=out*self.sa(out)
+        return out+residual
+
+
+if __name__ == '__main__':
+    input=torch.randn(50,512,7,7)
+    kernel_size=input.shape[2]
+    cbam = CBAMBlock(channel=512,reduction=16,kernel_size=kernel_size)
+    output=cbam(input)
+    print(output.shape)
+
+    
 #model = ResnetABMIL()
 model = resnet34(pretrained = True)
-img = torchvision.io.read_image('/data/kpusteln/Fetal-RL/swin-transformer/models/img3.JPEG')
-img = img.float()
-img = img.unsqueeze(0)
-#img = img.resize(1, 3, 224, 224)
-img = torchvision.transforms.functional.resize(img, 224)
-print(f'dupa{img.shape}')
+
+img = torch.rand(1, 3, 224, 224)
 x = model(img)

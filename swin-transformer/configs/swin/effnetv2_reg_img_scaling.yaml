@@ -4,23 +4,23 @@ DATA:
   DATASET: fetal
   BATCH_SIZE: 8
   AUGM: False
-  IMG_SCALING: True
+  IMG_SCALING: False
 MODEL:
-  TYPE: effnetv2_meta
-  NAME: effnetv2_reg_l2_scaling_drop02
+  TYPE: effnetv2
+  NAME: effnetv2_reg_l1_no_scaling_no_meta_drop04_new_lr_no_augm_no_sigm_avgpool
   NUM_CLASSES: 1
   TASK_TYPE: reg
   AFFIX: .csv
   LABEL_SMOOTHING: 0.0
-  LOSS: 'L2'
-  DROP_RATE : 0.2
+  LOSS: 'L1'
+  DROP_RATE : 0.4
 TRAIN:
   EPOCHS: 90
   WARMUP_EPOCHS: 5
   WEIGHT_DECAY: 0.05
-  BASE_LR: 1.25e-3 # 4096 batch-size
-  WARMUP_LR: 1.25e-3
-  MIN_LR: 1.25e-6
+  BASE_LR: 6.25e-3
+  WARMUP_LR: 6.25e-08
+  MIN_LR: 6.25e-07
 AUG:
   MIXUP: 0.0
   CUTMIX: 0.0

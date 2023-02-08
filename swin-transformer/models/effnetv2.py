@@ -2,22 +2,21 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 from torchvision.models import efficientnet_v2_l
-
+from .cbam import CBAMBlock
 
     
     
-
-
 class EffnetV2_L(torch.nn.Module):
-    def __init__(self, out_features = 7, in_channels = 1):
+    def __init__(self, out_features = 7, in_channels = 1, dropout = 0.4):
         super().__init__()
         
-        
+        self.dropout = dropout
         self.out_features = out_features
         self.in_channels = in_channels
         self.model = efficientnet_v2_l(weights = 'EfficientNet_V2_L_Weights.IMAGENET1K_V1')
         self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
-        self.model.classifier = torch.nn.Sequential(nn.Dropout(0.4), nn.Linear(1280, self.out_features))
+        self.model.classifier = torch.nn.Sequential(nn.Dropout(self.dropout), nn.Linear(1280, self.out_features))
+        #self.model.avgpool = torch.nn.Linear(16*16, 1)
         #self.classifier = torch.nn.Sequential(nn.Dropout(0.4), nn.Linear(1280, self.out_features))
         
         
@@ -27,7 +26,49 @@ class EffnetV2_L(torch.nn.Module):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
         
     def forward(self, x):
+        # x = self.model.features(x)
+        # x = x.view(x.size(0), 1280, -1)
+        # x = self.model.avgpool(x)
+        # x = x.squeeze(-1)
+        # x = self.model.classifier(x)
         return self.model(x)
+    
+
+
+class EffnetV2_L_cbam(torch.nn.Module):
+    def __init__(self, out_features = 7, in_channels = 1, dropout = 0.4):
+        super().__init__()
+        
+        self.dropout = dropout
+        self.out_features = out_features
+        self.in_channels = in_channels
+        self.model = efficientnet_v2_l(weights = 'EfficientNet_V2_L_Weights.IMAGENET1K_V1')
+        self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+        self.model.classifier = torch.nn.Identity()
+        self.cbam = CBAMBlock(channel=1280, reduction=64, kernel_size=16*16)
+        self.model.classifier = torch.nn.Sequential(nn.Dropout(self.dropout), nn.Linear(1280, self.out_features))
+        self.linear = torch.nn.Linear(16*16, 1)
+        self.sigmoid = torch.nn.Sigmoid()
+        #self.classifier = torch.nn.Sequential(nn.Dropout(0.4), nn.Linear(1280, self.out_features))
+        
+        
+        
+    def count_params(self):
+        
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+        
+    def forward(self, x):
+        x = self.model.features(x)
+        x = self.cbam(x)
+        #print(x.shape)
+        x = x.view(x.size(0), 1280, -1)
+        #print(x.shape)
+        x = self.linear(x)
+        x = x.squeeze(-1)
+        #print(x.shape)
+        x = self.model.classifier(x)
+        x = self.sigmoid(x)
+        return x
 
 
 class EffnetV2_L_pos_encoding(torch.nn.Module):
@@ -101,8 +142,7 @@ class EffnetV2_L_meta(torch.nn.Module):
                                              torch.nn.Linear(512, out_features = self.out_features),) # 1280 + 64 meta feature (days, frame_location)
         self.meta = torch.nn.Sequential(nn.Linear(2, 4),
                                         nn.BatchNorm1d(4),
-                                        nn.SiLU(),
-                                        nn.Dropout(self.dropout))
+                                        nn.SiLU(),)
                                         
     def count_params(self):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
@@ -116,11 +156,8 @@ class EffnetV2_L_meta(torch.nn.Module):
         out = self.classifier(features)
         return out
     
-# print(EffnetV2_L_D().count_params())
-# test_tensor = torch.rand(2, 1, 448, 448)
-# meta1 = torch.rand(2)
-# meta2 = torch.rand(2)
-# model = EffnetV2_L_D()
-# meta = torch.stack([meta1, meta2], dim = 1)
-# print(meta)
-# print(model((test_tensor, meta)).shape)
+    
+# model = EffnetV2_L()
+# test_tensor = torch.rand(8, 1, 512, 512)
+
+# print(model(test_tensor).shape)
