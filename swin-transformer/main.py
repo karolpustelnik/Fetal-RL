@@ -361,7 +361,7 @@ def validate(config, data_loader, model):
                 scaler = joblib.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/normalizer_measure_img_scaling')
                 predicted_measure = scaler.inverse_transform(outputs.cpu().numpy())
             else:
-                scaler = joblib.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/normalizer_measure')
+                scaler = joblib.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/all/all_scaler')
                 predicted_measure = scaler.inverse_transform(outputs.cpu().numpy()) * ps
             predicted_measure = torch.from_numpy(predicted_measure)
             predicted_measure = predicted_measure.cuda(non_blocking=True)
