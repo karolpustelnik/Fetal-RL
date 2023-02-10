@@ -7,17 +7,17 @@ from .cbam import CBAMBlock
     
     
 class EffnetV2_L(torch.nn.Module):
-    def __init__(self, out_features = 7, in_channels = 1, dropout = 0.4):
+    def __init__(self, out_features = 7, in_channels = 1, dropout = 0.4, use_sigmoid = False):
         super().__init__()
         
+        self.use_sigmoid = use_sigmoid
         self.dropout = dropout
         self.out_features = out_features
         self.in_channels = in_channels
         self.model = efficientnet_v2_l(weights = 'EfficientNet_V2_L_Weights.IMAGENET1K_V1')
         self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
         self.model.classifier = torch.nn.Sequential(nn.Dropout(self.dropout), nn.Linear(1280, self.out_features))
-        #self.model.avgpool = torch.nn.Linear(16*16, 1)
-        #self.classifier = torch.nn.Sequential(nn.Dropout(0.4), nn.Linear(1280, self.out_features))
+        self.sigmoid = torch.nn.Sigmoid()
         
         
         
@@ -31,7 +31,10 @@ class EffnetV2_L(torch.nn.Module):
         # x = self.model.avgpool(x)
         # x = x.squeeze(-1)
         # x = self.model.classifier(x)
-        return self.model(x)
+        x = self.model(x)
+        if self.use_sigmoid:
+            x = self.sigmoid(x)
+        return x
     
 
 

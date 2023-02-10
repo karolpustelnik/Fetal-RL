@@ -74,6 +74,8 @@ _C.MODEL.RESUME_REGRESOR = ''
 _C.MODEL.NUM_CLASSES = 7
 # Dropout rate
 _C.MODEL.DROP_RATE = 0.0
+
+_C.MODEL.SIGMOID = False
 # Task type
 _C.MODEL.TASK_TYPE = 'reg'
 _C.MODEL.AFFIX = '.csv'

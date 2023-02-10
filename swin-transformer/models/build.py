@@ -39,7 +39,7 @@ def build_model(config):
         model = EffNet(out_features = config.MODEL.NUM_CLASSES)
         
     elif model_type == 'effnetv2' or model_type == 'effnetv2_cls_pos_encoding':
-        model = EffnetV2_L(out_features = config.MODEL.NUM_CLASSES, dropout= config.MODEL.DROP_RATE)
+        model = EffnetV2_L(out_features = config.MODEL.NUM_CLASSES, dropout= config.MODEL.DROP_RATE, use_sigmoid = config.MODEL.SIGMOID)
         
     elif model_type == 'efl':
         model = EFL(out_features = config.MODEL.NUM_CLASSES)

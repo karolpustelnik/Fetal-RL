@@ -7,13 +7,14 @@ DATA:
   IMG_SCALING: False
 MODEL:
   TYPE: effnetv2
-  NAME: effnetv2_reg_l1_no_scaling_no_meta_drop04_new_lr_no_augm_no_sigm_avgpool
+  NAME: rysy_effnetv2_classic_l1_no_sigmoid_no_scaling_drop04_fixed_bug
   NUM_CLASSES: 1
   TASK_TYPE: reg
   AFFIX: .csv
   LABEL_SMOOTHING: 0.0
   LOSS: 'L1'
   DROP_RATE : 0.4
+  SIGMOID: False
 TRAIN:
   EPOCHS: 90
   WARMUP_EPOCHS: 5
