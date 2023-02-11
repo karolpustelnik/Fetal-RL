@@ -79,6 +79,7 @@ _C.MODEL.SIGMOID = False
 # Task type
 _C.MODEL.TASK_TYPE = 'reg'
 _C.MODEL.AFFIX = '.csv'
+_C.MODEL.BODY_PART = 'abdomen'
 # Drop path rate
 _C.MODEL.DROP_PATH_RATE = 0.1
 # Label Smoothing

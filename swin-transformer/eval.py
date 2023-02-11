@@ -71,10 +71,11 @@ def parse_option():
 
     # distributed training
     parser.add_argument("--local_rank", type=int, required=False, help='local rank for DistributedDataParallel')
-
+    parser.add_argument("--train_path", type=str, help='path to training data')
+    parser.add_argument("--val_path", type=str, help='path to validation data')
+    parser.add_argument("--path_prefix", type=str, help='path prefix eq. /home/karol')
     # for acceleration
     parser.add_argument('--fused_window_process', action='store_true', help='Fused window shift & window partition, similar for reversed part.')
-
     args, unparsed = parser.parse_known_args()
 
     config = get_config(args)
@@ -298,7 +299,7 @@ def validate(config, data_loader, model):
             ps = ps.cpu().numpy()
             print(f'shape of ps :{ps.shape}')
             print(f'shape of outputs :{outputs.shape}')
-            scaler = joblib.load('/data/kpusteln/Fetal-RL/data_preparation/scripts/scaler_filename')
+            scaler = joblib.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/normalizer_measure')            
             print(outputs)
             print(ps)
             predicted_measure = scaler.inverse_transform(outputs.cpu().numpy()) * ps
@@ -320,7 +321,7 @@ def validate(config, data_loader, model):
     elif config.MODEL.TASK_TYPE == 'reg':
         data_frame = pd.DataFrame({'index': frames, 'video': videos, 'measures': measures})
         print('Saving...')
-        data_frame.to_csv('/data/kpusteln/Fetal-RL/test_data/results_reg_two_models_val_gt.csv', index = False)
+        data_frame.to_csv('/data/kpusteln/Fetal-RL/test_data/results_reg_img_scaling.csv', index = False)
         print('Finished!')
         
 

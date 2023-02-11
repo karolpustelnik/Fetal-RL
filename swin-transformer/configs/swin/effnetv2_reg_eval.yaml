@@ -5,8 +5,8 @@ DATA:
   DATASET: fetal
   BATCH_SIZE: 256
   AUGM: False
-  TRAIN_SET: '/data/kpusteln/Fetal-RL/test_data/results_two_models_cls_filtered_val_gt.csv'
-  VAL_SET: '/data/kpusteln/Fetal-RL/test_data/results_two_models_cls_filtered_val_gt.csv'
+  TRAIN_SET: '/data/kpusteln/Fetal-RL/test_data/results_two_models_cls_filtered.csv'
+  VAL_SET: '/data/kpusteln/Fetal-RL/test_data/results_two_models_cls_filtered.csv'
 MODEL:
   TYPE: effnetv2
   NAME: effnetv2_reg

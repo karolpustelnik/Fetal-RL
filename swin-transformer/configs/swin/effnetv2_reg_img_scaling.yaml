@@ -2,12 +2,12 @@ PARALLEL_TYPE: 'ddp'
 DATA:
   IMG_SIZE: 512
   DATASET: fetal
-  BATCH_SIZE: 8
+  BATCH_SIZE: 16
   AUGM: False
   IMG_SCALING: False
 MODEL:
   TYPE: effnetv2
-  NAME: rysy_effnetv2_classic_l1_no_sigmoid_no_scaling_drop04_fixed_bug
+  NAME: effnetv2_classic_l1_no_sigmoid_no_scaling_drop04_fixed_bug
   NUM_CLASSES: 1
   TASK_TYPE: reg
   AFFIX: .csv
@@ -15,6 +15,7 @@ MODEL:
   LOSS: 'L1'
   DROP_RATE : 0.4
   SIGMOID: False
+  BODY_PART: 'all'
 TRAIN:
   EPOCHS: 90
   WARMUP_EPOCHS: 5

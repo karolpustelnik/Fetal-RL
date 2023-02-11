@@ -38,7 +38,7 @@ class Fetal_frame_eval(data.Dataset):
 
     def _load_image(self, path):
         try:
-            im = Image.open(path)
+            im = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
         except:
             print("ERROR IMG NOT LOADED: ", path)
             random_img = np.random.rand(224, 224, 3) * 255
@@ -54,16 +54,21 @@ class Fetal_frame_eval(data.Dataset):
         """
         idb = self.database.iloc[index]
         frame_idx = idb[0]
-        ps = idb[2]
+        ps = idb[3]
         video = idb[1]
-        Class = idb[3]
+        Class = idb[2]
         #ps = torch.tensor(idb[4])
 
         images = self._load_image(self.data_path  + frame_idx + '.png')
+        images = np.expand_dims(images, 2)
+        t = transforms.Compose([transforms.ToTensor(),
+        transforms.Resize((450, 600)),
+        transforms.Pad((0, 0, 0, 150), fill = 0, padding_mode = 'constant'),
+        transforms.Resize((512, 512)),
+        transforms.Normalize(mean=0.1354949, std=0.18222201)])
+        images = t(images)
         if self.transform is not None:
             images = self.transform(images)
-        if self.target_transform is not None:
-            target = self.target_transform(target)
         
         return images, frame_idx, video, ps, Class
 

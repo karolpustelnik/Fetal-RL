@@ -361,7 +361,14 @@ def validate(config, data_loader, model):
                 scaler = joblib.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/normalizer_measure_img_scaling')
                 predicted_measure = scaler.inverse_transform(outputs.cpu().numpy())
             else:
-                scaler = joblib.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/all/all_scaler')
+                if config.MODEL.BODY_PART == 'head':
+                    scaler = joblib.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/head/head_scaler')
+                elif config.MODEL.BODY_PART == 'abdomen':
+                    scaler = joblib.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/abdomen/abdomen_scaler')
+                elif config.MODEL.BODY_PART == 'femur':
+                    scaler = joblib.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/femur/femur_scaler')
+                elif config.MODEL.BODY_PART == 'all':
+                    scaler = joblib.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/all/all_scaler')
                 predicted_measure = scaler.inverse_transform(outputs.cpu().numpy()) * ps
             predicted_measure = torch.from_numpy(predicted_measure)
             predicted_measure = predicted_measure.cuda(non_blocking=True)
