@@ -13,8 +13,8 @@ parameters:
     min: 0.1
   base_lr:
     distribution: uniform
-    max: 1.25e-04
-    min: 1.25e-06
+    max: 1.25e-05
+    min: 1.25e-07
   optimizer:
     values:
       - 'adamw'
@@ -24,18 +24,10 @@ parameters:
     values:
       - true
       - false
-  sigmoid:
-    values:
-      - true
-      - false
   attention:
     values:
       - true
       - false
-  loss:
-    values:
-      - 'L1'
-      - 'L2'
 program: new_main.py
 command:
   - srun

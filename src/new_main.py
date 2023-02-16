@@ -25,7 +25,6 @@ from torchmetrics import MeanSquaredError
 from torchmetrics import R2Score
 from torchmetrics.functional import r2_score
 import joblib
-
 from config import get_config
 from models import build_model
 from data import build_loader
@@ -43,7 +42,7 @@ def setup(rank, world_size):
         world_size: number of processes
     """
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '65532'
+    os.environ['MASTER_PORT'] = '60345'
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
 
     # initialize the process group
