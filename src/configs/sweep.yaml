@@ -1,0 +1,44 @@
+method: bayes
+metric:
+  goal: minimize
+  name: 'Val MAPE'
+parameters:
+  augm:
+    values:
+      - True
+      - False
+  dropout:
+    distribution: uniform
+    max: 0.6
+    min: 0.1
+  base_lr:
+    distribution: uniform
+    max: 1.25e-04
+    min: 1.25e-06
+  optimizer:
+    values:
+      - 'adamw'
+      - sgd
+      - rms
+  scaling:
+    values:
+      - True
+      - False
+  sigmoid:
+    values:
+      - True
+      - False
+  attention:
+    values:
+      - True
+      - False
+  loss:
+    values:
+      - 'L1'
+      - 'L2'
+program: new_main.py
+command:
+  - srun
+  - python3
+  - ${program}
+  - ${args}

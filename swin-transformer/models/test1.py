@@ -1,1 +1,0 @@
-from torchvision.models import efficientnet_v2_l
