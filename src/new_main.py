@@ -43,7 +43,7 @@ def setup(rank, world_size):
         world_size: number of processes
     """
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
+    os.environ['MASTER_PORT'] = '65532'
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
 
     # initialize the process group
@@ -91,13 +91,13 @@ def parse_option():
     parser.add_argument("--val_path", type=str, help='path to validation data')
     parser.add_argument("--path_prefix", type=str, help='path prefix eq. /home/karol')
     # for acceleration
-    parser.add_argument("--augm", type = bool, help='use augmentation')
+    parser.add_argument("--augm", help='use augmentation')
     parser.add_argument("--dropout", type = float, help='dropout')
     parser.add_argument("--base_lr", type = float, help='base learning rate')
     parser.add_argument("--optimizer", type = str, help='optimizer')
-    parser.add_argument("--scaling", type = bool, help='whether to use imgscaling')
-    parser.add_argument("--sigmoid", type = bool, help='whether to use sigmoid')
-    parser.add_argument("--attention", type = bool, help='whether to use spatial attention')
+    parser.add_argument("--scaling", help='whether to use imgscaling')
+    parser.add_argument("--sigmoid", help='whether to use sigmoid')
+    parser.add_argument("--attention", help='whether to use spatial attention')
     parser.add_argument("--loss", type = str, help='loss function')
     
     args, unparsed = parser.parse_known_args()
@@ -125,12 +125,14 @@ def main(rank, world_size, config):
     linear_scaled_warmup_lr = float(config.TRAIN.WARMUP_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
     linear_scaled_min_lr = float(config.TRAIN.MIN_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
     name = config.MODEL.NAME + f"_bs{config.DATA.BATCH_SIZE}_lr{config.TRAIN.BASE_LR}_opt{config.TRAIN.OPTIMIZER.NAME}_loss{config.MODEL.LOSS}_augm{config.DATA.AUGM}_drop{config.MODEL.DROP_RATE}_scaling{config.DATA.IMG_SCALING}_sigmoid{config.MODEL.SIGMOID}_attention{config.MODEL.ATTENTION}"
+    output = os.path.join(config.OUTPUT, name, config.TAG)
     config.defrost()
     config.DATA.BATCH_SIZE = config.DATA.BATCH_SIZE * dist.get_world_size()
     config.TRAIN.BASE_LR = linear_scaled_lr
     config.TRAIN.WARMUP_LR = linear_scaled_warmup_lr
     config.TRAIN.MIN_LR = linear_scaled_min_lr
     config.MODEL.NAME = name
+    config.OUTPUT = output
     config.freeze()
 
     os.makedirs(config.OUTPUT, exist_ok=True)

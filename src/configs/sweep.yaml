@@ -5,8 +5,8 @@ metric:
 parameters:
   augm:
     values:
-      - True
-      - False
+      - true
+      - false
   dropout:
     distribution: uniform
     max: 0.6
@@ -22,16 +22,16 @@ parameters:
       - 'rms'
   scaling:
     values:
-      - True
-      - False
+      - true
+      - false
   sigmoid:
     values:
-      - True
-      - False
+      - true
+      - false
   attention:
     values:
-      - True
-      - False
+      - true
+      - false
   loss:
     values:
       - 'L1'

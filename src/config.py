@@ -203,21 +203,21 @@ def update_config(config, args):
     if args.throughput:
         config.THROUGHPUT_MODE = True
     if args.augm:
-        config.DATA.AUGM = args.augm
+        config.DATA.AUGM = True if args.augm == 'True' else False
     if args.dropout:
-        config.MODEL.DROPOUT = args.dropout
+        config.MODEL.DROP_RATE = args.dropout
     if args.base_lr:
         config.TRAIN.BASE_LR = args.base_lr
     if args.optimizer:
         config.TRAIN.OPTIMIZER.NAME = args.optimizer
     if args.scaling:
-        config.DATA.IMG_SCALING = args.scaling
+        config.DATA.IMG_SCALING = True if args.scaling == 'True' else False
     if args.sigmoid:
-        config.MODEL.SIGMOID = args.sigmoid
+        config.MODEL.SIGMOID = True if args.sigmoid == 'True' else False
     if args.loss:
         config.MODEL.LOSS = args.loss
     if args.attention:
-        config.MODEL.ATTENTION = args.attention
+        config.MODEL.ATTENTION = True if args.attention == 'True' else False
 
     
 
@@ -225,7 +225,6 @@ def update_config(config, args):
     config.LOCAL_RANK = args.local_rank
 
     # output folder
-    config.OUTPUT = os.path.join(config.OUTPUT, config.MODEL.NAME, config.TAG)
 
     config.freeze()
 

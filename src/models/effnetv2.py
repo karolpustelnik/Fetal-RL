@@ -41,7 +41,8 @@ class EffnetV2_L(torch.nn.Module):
         self.model.avgpool = torch.nn.Identity()
         self.model.classifier = torch.nn.Sequential(nn.Dropout(self.dropout), nn.Linear(1280, self.out_features))
         self.sigmoid = torch.nn.Sigmoid()
-        self.spatial_attention = SpatialAttention(n_channels=1280)
+        if self.use_attention:
+            self.spatial_attention = SpatialAttention(n_channels=1280)
         self.avgpool = torch.nn.AdaptiveAvgPool2d((1, 1))
         
         
