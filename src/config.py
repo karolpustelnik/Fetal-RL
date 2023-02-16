@@ -218,6 +218,7 @@ def update_config(config, args):
         config.MODEL.LOSS = args.loss
     if args.attention:
         config.MODEL.ATTENTION = args.attention
+
     
 
     # set local rank for distributed training

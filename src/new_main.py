@@ -113,7 +113,8 @@ def main(rank, world_size, config):
     setup(rank, world_size)
     print("--------------rank", rank)
     print("---------------world size", world_size)
-    wandb.init(project="Fetal-Multimodal") 
+    if rank == 0:
+        wandb.init() 
     seed = config.SEED + dist.get_rank()
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -123,11 +124,13 @@ def main(rank, world_size, config):
     linear_scaled_lr = float(config.TRAIN.BASE_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
     linear_scaled_warmup_lr = float(config.TRAIN.WARMUP_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
     linear_scaled_min_lr = float(config.TRAIN.MIN_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
-
+    name = config.MODEL.NAME + f"_bs{config.DATA.BATCH_SIZE}_lr{config.TRAIN.BASE_LR}_opt{config.TRAIN.OPTIMIZER.NAME}_loss{config.MODEL.LOSS}_augm{config.DATA.AUGM}_drop{config.MODEL.DROP_RATE}_scaling{config.DATA.IMG_SCALING}_sigmoid{config.MODEL.SIGMOID}_attention{config.MODEL.ATTENTION}"
     config.defrost()
+    config.DATA.BATCH_SIZE = config.DATA.BATCH_SIZE * dist.get_world_size()
     config.TRAIN.BASE_LR = linear_scaled_lr
     config.TRAIN.WARMUP_LR = linear_scaled_warmup_lr
     config.TRAIN.MIN_LR = linear_scaled_min_lr
+    config.MODEL.NAME = name
     config.freeze()
 
     os.makedirs(config.OUTPUT, exist_ok=True)
@@ -235,10 +238,12 @@ def main(rank, world_size, config):
                                 logger)
             if config.MODEL.TASK_TYPE == 'cls':
                 acc1_meter, f1_score_meter, recall_meter, precision_meter = validate(config, data_loader_val, model, logger)
-                wandb.log({'val_acc': acc1_meter, 'val_f1_score': f1_score_meter, 'val_recall': recall_meter, 'val_precision': precision_meter}, step = epoch)
+                if rank == 0:
+                    wandb.log({'val_acc': acc1_meter, 'val_f1_score': f1_score_meter, 'val_recall': recall_meter, 'val_precision': precision_meter}, step = epoch)
             elif config.MODEL.TASK_TYPE == 'reg':
                 mae_meter, mape_meter, rmse_meter, loss_meter_reg = validate(config, data_loader_val, model, logger)
-                wandb.log({'val_mae': mae_meter, 'val_mape': mape_meter, 'val_rmse': rmse_meter, 'val_loss': loss_meter_reg}, step = epoch)
+                if rank == 0:
+                    wandb.log({'val_mae': mae_meter, 'val_mape': mape_meter, 'val_rmse': rmse_meter, 'val_loss': loss_meter_reg}, step = epoch)
             
     elif config.EVAL_MODE == True:
         acc1, f1_score, recall, precision,  loss_cls, loss_reg = validate(config, data_loader_val, model, logger)
@@ -317,13 +322,15 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
                     f'Train: [{epoch}/{config.TRAIN.EPOCHS}][{idx}/{num_steps}]\t'
                     f'cls loss {loss_meter_cls.val:.4f} ({loss_meter_cls.avg:.4f})\t'
                     f'lr {lr:.6f}\t')
-                wandb.log({"Train Loss": loss_meter_cls.avg, "lr": lr})
+                if dist.get_rank() == 0:
+                    wandb.log({"Train Loss": loss_meter_cls.avg, "lr": lr})
             elif config.MODEL.TASK_TYPE == 'reg':
                 logger.info(
                     f'Train: [{epoch}/{config.TRAIN.EPOCHS}][{idx}/{num_steps}]\t'
                     f'reg loss {loss_meter_reg.val:.4f} ({loss_meter_reg.avg:.4f})\t'
                     f'lr {lr:.6f}\t')
-                wandb.log({"Train Loss": loss_meter_reg.avg, "lr": lr})
+                if dist.get_rank() == 0:
+                    wandb.log({"Train Loss": loss_meter_reg.avg, "lr": lr})
             # add logging
             
     
@@ -470,21 +477,23 @@ def validate(config, data_loader, model, logger):
         logger.info(f' * recall {recall_meter.avg:.3f}')
         logger.info(f' * precision {precision_meter.avg:.3f}')
         logger.info(f' * cls loss {loss_meter_cls.avg:.3f}')
-        wandb.log({"Val Loss": loss_meter_cls.avg,})
-        wandb.log({"Val Acc": acc1_meter.avg,})
-        wandb.log({"Val F1": f1_score_meter.avg,})
-        wandb.log({"Val Recall": recall_meter.avg,})
-        wandb.log({"Val Precision": precision_meter.avg,})
+        if dist.get_rank() == 0:
+            wandb.log({"Val Loss": loss_meter_cls.avg,})
+            wandb.log({"Val Acc": acc1_meter.avg,})
+            wandb.log({"Val F1": f1_score_meter.avg,})
+            wandb.log({"Val Recall": recall_meter.avg,})
+            wandb.log({"Val Precision": precision_meter.avg,})
     elif config.MODEL.TASK_TYPE == 'reg':
         print('Finished validation! Results:')
         logger.info(f' * mae {mae_meter.avg:.3f}')
         logger.info(f' * mape {mape_meter.avg:.3f}')
         logger.info(f' * rmse {rmse_meter.avg:.3f}')
         logger.info(f' * Reg loss {loss_meter_reg.avg:.3f}')
-        wandb.log({"Val Loss": loss_meter_reg.avg,})
-        wandb.log({"Val MAE": mae_meter.avg,})
-        wandb.log({"Val MAPE": mape_meter.avg,})
-        wandb.log({"Val RMSE": rmse_meter.avg,})
+        if dist.get_rank() == 0:
+            wandb.log({"Val Loss": loss_meter_reg.avg,})
+            wandb.log({"Val MAE": mae_meter.avg,})
+            wandb.log({"Val MAPE": mape_meter.avg,})
+            wandb.log({"Val RMSE": rmse_meter.avg,})
     
     if config.MODEL.TASK_TYPE == 'cls':
         return acc1_meter.avg, f1_score_meter.avg, recall_meter.avg, precision_meter.avg

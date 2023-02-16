@@ -2,7 +2,7 @@ PARALLEL_TYPE: 'ddp'
 DATA:
   IMG_SIZE: 512
   DATASET: fetal
-  BATCH_SIZE: 16
+  BATCH_SIZE: 8 #per 1 gpu
   AUGM: True
   IMG_SCALING: False
 MODEL:

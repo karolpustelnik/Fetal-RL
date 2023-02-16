@@ -18,8 +18,8 @@ parameters:
   optimizer:
     values:
       - 'adamw'
-      - sgd
-      - rms
+      - 'sgd'
+      - 'rms'
   scaling:
     values:
       - True
