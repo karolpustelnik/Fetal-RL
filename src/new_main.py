@@ -42,7 +42,7 @@ def setup(rank, world_size):
         world_size: number of processes
     """
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '60345'
+    os.environ['MASTER_PORT'] = '60346'
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
 
     # initialize the process group

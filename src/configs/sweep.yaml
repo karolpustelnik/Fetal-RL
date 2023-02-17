@@ -14,15 +14,12 @@ parameters:
   base_lr:
     distribution: uniform
     max: 1.25e-05
-    min: 1.25e-07
+    min: 1.25e-06
   optimizer:
     values:
       - 'adamw'
-      - 'sgd'
-      - 'rms'
   scaling:
     values:
-      - true
       - false
   attention:
     values:

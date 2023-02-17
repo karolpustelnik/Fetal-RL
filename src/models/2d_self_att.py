@@ -5,7 +5,7 @@ from torchvision.models import efficientnet_v2_l
 
     
 class SpatialAttention(torch.nn.Module):
-    def __init__(self, feature_map_size = 7, n_channels = 512):
+    def __init__(self, feature_map_size = 16, n_channels = 1280):
         super().__init__()
     
         self.feature_map_size = feature_map_size
@@ -18,14 +18,16 @@ class SpatialAttention(torch.nn.Module):
         self.alpha = torch.nn.Parameter(torch.zeros(1))
         
     def forward(self, x):
-        queries = self.queries(x)
-        keys = self.keys(x)
-        softmax = self.softmax(torch.matmul(queries, keys))
-        attention = torch.matmul(softmax, self.values(x))
-        attention = self.refine(attention)
-        output = self.alpha * attention + x
         
-        return output
+        attended_features = torch.matmul(self.softmax(torch.matmul(self.keys(x).view(x.size(0), self.n_channels, -1).permute(0, 2, 1), 
+                                                                   self.queries(x).view(x.size(0), self.n_channels, -1))), 
+                                         self.values(x).view(x.size(0), self.n_channels, -1).permute(0, 2, 1)) # (batch_size, feature_map_size * feature_map_size, n_channels)
+        attended_features = attended_features.permute(0, 2, 1).view(x.size(0), self.n_channels, self.feature_map_size, self.feature_map_size) # (batch_size, n_channels, feature_map_size, feature_map_size)
+        attended_features = self.refine(attended_features)
+        attended_features = self.alpha * attended_features + x
+        print(attended_features.shape)
+        
+        return attended_features
 
     
 class EffnetV2_L(torch.nn.Module):

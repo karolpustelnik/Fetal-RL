@@ -15,3 +15,4 @@ src/models/__pycache__/vit.cpython-37.pyc
 src/wandb/
 src/data/__pycache__
 src/models/__pycache__
+src/config
