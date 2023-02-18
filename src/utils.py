@@ -18,7 +18,7 @@ def load_checkpoint(config, model, optimizer, lr_scheduler, loss_scaler, logger)
             config.MODEL.RESUME, map_location='cpu', check_hash=True)
     else:
         checkpoint = torch.load(config.MODEL.RESUME, map_location='cpu')
-    msg = model.module.load_state_dict(checkpoint['model'], strict=False)
+    msg = model.load_state_dict(checkpoint['model'], strict=False)
     logger.info(msg)
     max_accuracy = 0.0
     if not config.EVAL_MODE and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
@@ -62,7 +62,7 @@ def load_pretrained(config, model, logger):
     relative_position_bias_table_keys = [k for k in state_dict.keys() if "relative_position_bias_table" in k]
     for k in relative_position_bias_table_keys:
         relative_position_bias_table_pretrained = state_dict[k]
-        relative_position_bias_table_current = model.module.state_dict()[k]
+        relative_position_bias_table_current = model.state_dict()[k]
         L1, nH1 = relative_position_bias_table_pretrained.size()
         L2, nH2 = relative_position_bias_table_current.size()
         if nH1 != nH2:
@@ -82,7 +82,7 @@ def load_pretrained(config, model, logger):
     for k in absolute_pos_embed_keys:
         # dpe
         absolute_pos_embed_pretrained = state_dict[k]
-        absolute_pos_embed_current = model.module.state_dict()[k]
+        absolute_pos_embed_current = model.state_dict()[k]
         _, L1, C1 = absolute_pos_embed_pretrained.size()
         _, L2, C2 = absolute_pos_embed_current.size()
         if C1 != C1:

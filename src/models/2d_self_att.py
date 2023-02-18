@@ -3,6 +3,29 @@ import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 from torchvision.models import efficientnet_v2_l
 
+class ChannelAttention(torch.nn.Module):
+    def __init__(self, feature_map_size = 16, n_channels = 1280):
+        super().__init__()
+    
+        self.feature_map_size = feature_map_size
+        self.n_channels = n_channels
+        self.keys = torch.nn.Conv2d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
+        self.queries = torch.nn.Conv2d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
+        self.values = torch.nn.Conv2d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
+        self.refine = torch.nn.Conv2d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
+        self.softmax = torch.nn.Softmax2d()
+        self.alpha = torch.nn.Parameter(torch.zeros(1))
+        
+    def forward(self, x):
+        attended_features = torch.matmul(self.softmax(torch.matmul(self.keys(x).view(x.size(0), self.n_channels, -1), 
+                                                                   self.queries(x).view(x.size(0), self.n_channels, -1).permute(0, 2, 1))), 
+                                         self.values(x).view(x.size(0), self.n_channels, -1)) # (batch_size, n_channels, feature_map_size * feature_map_size)
+        attended_features = attended_features.view(x.size(0), self.n_channels, self.feature_map_size, self.feature_map_size) # (batch_size, n_channels, feature_map_size, feature_map_size)
+        attended_features = self.refine(attended_features)
+        attended_features = self.alpha * attended_features + x
+        
+        return attended_features
+    
     
 class SpatialAttention(torch.nn.Module):
     def __init__(self, feature_map_size = 16, n_channels = 1280):
@@ -44,7 +67,7 @@ class EffnetV2_L(torch.nn.Module):
         self.model.avgpool = torch.nn.Identity()
         self.model.classifier = torch.nn.Sequential(nn.Dropout(self.dropout), nn.Linear(1280, self.out_features))
         self.sigmoid = torch.nn.Sigmoid()
-        self.spatial_attention = SpatialAttention(feature_map_size=16, n_channels=1280)
+        self.spatial_attention = ChannelAttention(feature_map_size=16, n_channels=1280)
         self.avgpool = torch.nn.AdaptiveAvgPool2d((1, 1))
         
         
