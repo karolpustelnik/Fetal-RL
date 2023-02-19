@@ -283,6 +283,7 @@ def validate(config, data_loader, model):
     videos = []
     measures = []
     Classes = []
+    probs = torch.tensor([])
     pss = []
     batch = 0
     for idx, (images, frame_name, video, ps, Class) in enumerate(data_loader):
@@ -294,7 +295,9 @@ def validate(config, data_loader, model):
             outputs = model(images) 
         if config.MODEL.TASK_TYPE == 'cls':
             predicted_classes = torch.nn.functional.softmax(outputs, dim=1).argmax(dim = 1).cpu()
+            probabilities = torch.nn.functional.softmax(outputs, dim=1).max(dim = 1)[0].cpu()
             results = torch.cat((results, predicted_classes), 0)
+            probs = torch.cat((probs, probabilities), 0)
             frames.extend(list(frame_name))
             videos.extend(list(video))
             ps = ps.cpu().numpy()
@@ -321,14 +324,20 @@ def validate(config, data_loader, model):
         results = results.to(torch.int64)
         #Classes = torch.stack(Classes)
         #Classes = Classes.numpy()
-        data_frame = pd.DataFrame({'index': frames, 'video': videos, 'predict': results, 'gt': Classes, 'ps': pss})
+        print('frames len' + str(len(frames)))
+        print('videos len' + str(len(videos)))
+        print('results len' + str(len(results)))
+        print('Classes len' + str(len(Classes)))
+        print('probs len' + str(len(probs)))
+        print('ps len' + str(len(pss)))
+        data_frame = pd.DataFrame({'index': frames, 'video': videos, 'predict': results, 'gt': Classes, 'probs': probs, 'ps': pss})
         print('Saving...')
-        data_frame.to_csv('/data/kpusteln/Fetal-RL/test_data/results_cls_two_models_val.csv', index = False)
+        data_frame.to_csv('/data/kpusteln/Fetal-RL/data_preparation/test_data/results_cls_new.csv', index = False)
         print('Finished!')
     elif config.MODEL.TASK_TYPE == 'reg':
         data_frame = pd.DataFrame({'index': frames, 'video': videos, 'measures': measures})
         print('Saving...')
-        data_frame.to_csv('/data/kpusteln/Fetal-RL/data_preparation/test_data/results_reg_bayes_test.csv', index = False)
+        data_frame.to_csv('/data/kpusteln/Fetal-RL/data_preparation/test_data/results_reg_bayes_test_fixed.csv', index = False)
         print('Finished!')
         
 

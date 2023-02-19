@@ -1,0 +1,16 @@
+results_test_abdomen_filtered = results_test_abdomen[results_test_abdomen['predict'] == 2]
+missing_videos_abdomen = set(videos) - set(results_test_abdomen_filtered['video'])
+restults_abdomen_missing_videos = results_test_abdomen[results_test_abdomen['video'].isin(missing_videos_abdomen)]
+abdomen_df = pd.DataFrame({'index': restults_abdomen_missing_videos['index'], 'video': restults_abdomen_missing_videos['video'], 'probs': restults_abdomen_missing_videos['probs']})
+abdomen_df_wide = pd.pivot_table(abdomen_df, values='probs', index=['index'], columns=['video']).reset_index()
+non_standard_plane_df = {}
+for column in abdomen_df_wide.columns:
+    if column != 'index' and column != 'video':
+        non_standard_planes = abdomen_df_wide[[column, 'index']].sort_values(ascending=False, by=column)[:8]
+        non_standard_planes_indexes = non_standard_planes['index'].values
+        non_standard_plane_df[column] = non_standard_planes_indexes
+non_standard_plane_df = pd.DataFrame(non_standard_plane_df)
+non_standard_plane_df = non_standard_plane_df.values.flatten()
+non_standard_plane_df_test = results_test_abdomen[results_test_abdomen['index'].isin(non_standard_plane_df)]
+results_test_abdomen_combined = pd.concat([results_test_abdomen_filtered, non_standard_plane_df_test], axis=0)
+assert len(results_test_abdomen_combined['video'].unique()) == len(results_test_abdomen['video'].unique())

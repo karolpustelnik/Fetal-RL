@@ -42,7 +42,8 @@ def setup(rank, world_size):
         world_size: number of processes
     """
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '60346'
+    port = str(random.randint(100, 60000))
+    os.environ['MASTER_PORT'] = port
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
 
     # initialize the process group
@@ -280,8 +281,9 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
         optimizer.zero_grad()
         if config.PARALLEL_TYPE == 'ddp':
             with torch.autocast(device_type='cuda', dtype=torch.float16):
-                meta = torch.stack((days_normalized, frame_loc), dim = 1).cuda(non_blocking=True)
+                
                 if config.MODEL.TYPE == 'effnetv2_meta':
+                    meta = torch.stack((days_normalized, frame_loc), dim = 1).cuda(non_blocking=True)
                     outputs = model((images, meta)) 
                 else:
                     outputs = model(images)
@@ -367,8 +369,9 @@ def validate(config, data_loader, model, logger):
             #labels = labels.cuda(non_blocking=True)
             #print(labels.shape)
             #with torch.autocast(device_type='cuda', dtype=torch.float16):
-                meta = torch.stack((days_normalized, frame_loc), dim = 1).cuda(non_blocking=True)
+                
                 if config.MODEL.TYPE == 'effnetv2_meta':
+                    meta = torch.stack((days_normalized, frame_loc), dim = 1).cuda(non_blocking=True)
                     outputs = model((images, meta)) 
                 else:
                     outputs = model(images)

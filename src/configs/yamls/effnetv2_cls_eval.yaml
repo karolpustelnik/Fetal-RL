@@ -5,15 +5,14 @@ DATA:
   DATASET: fetal
   BATCH_SIZE: 256
   AUGM: False
-  TRAIN_SET: '/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_val_eval.csv'
-  VAL_SET: '/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_val_eval.csv'
+  TRAIN_SET: '/data/kpusteln/Fetal-RL/data_preparation/test_data/test_data_filtered.csv'
+  VAL_SET: '/data/kpusteln/Fetal-RL/data_preparation/test_data/test_data_filtered.csv'
 MODEL:
   TYPE: effnetv2
   NAME: effnetv2_cls
   NUM_CLASSES: 7
   TASK_TYPE: cls
   AFFIX: .csv
-  LABEL_SMOOTHING: 0.0
 TRAIN:
   EPOCHS: 90
   WARMUP_EPOCHS: 5
@@ -22,6 +21,5 @@ TRAIN:
   WARMUP_LR: 1.25e-7
   MIN_LR: 1.25e-6
   AUTO_RESUME: FALSE
-AUG:
-  MIXUP: 0.0
-  CUTMIX: 0.0
+  OPTIMIZER:
+      NAME: adamW

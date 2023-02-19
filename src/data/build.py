@@ -14,7 +14,7 @@ from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.data import Mixup
 from timm.data import create_transform
 
-from .fetal_loader import Fetal_frame, Fetal_vid_old, Fetal_vid_new, Fetal_frame_eval
+from .fetal_loader import Fetal_frame, Fetal_vid_old, Fetal_vid_new, Fetal_frame_eval_reg, Fetal_frame_eval_cls
 
 try:
     from torchvision.transforms import InterpolationMode
@@ -87,7 +87,7 @@ def build_loader(config):
             shuffle = False,
             batch_size=config.DATA.BATCH_SIZE,
             num_workers=2,
-            drop_last=True)
+            drop_last=False)
 
 
     # setup mixup / cutmix
@@ -117,7 +117,11 @@ def build_dataset(is_train, config):
             dataset = Fetal_frame(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform, img_scaling = config.DATA.IMG_SCALING)
             nb_classes = config.MODEL.NUM_CLASSES
     if config.TRAIN.AUTO_RESUME == False:
-            dataset = Fetal_frame_eval(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform)
+        if config.MODEL.TASK_TYPE == 'reg':
+            dataset = Fetal_frame_eval_reg(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform)
+            nb_classes = config.MODEL.NUM_CLASSES
+        elif config.MODEL.TASK_TYPE == 'cls':
+            dataset = Fetal_frame_eval_cls(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform)
             nb_classes = config.MODEL.NUM_CLASSES
 
 

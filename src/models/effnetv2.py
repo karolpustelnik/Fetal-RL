@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 from torchvision.models import efficientnet_v2_l
-from .cbam import CBAMBlock
+#from .cbam import CBAMBlock
 
 class SpatialAttention(torch.nn.Module):
     def __init__(self, feature_map_size = 16, n_channels = 1280):
@@ -29,32 +29,47 @@ class SpatialAttention(torch.nn.Module):
         return attended_features
     
     
-class SpatialAttention_old(torch.nn.Module):
-    def __init__(self, n_channels = 512):
+    
+class KeyFrameAttention(torch.nn.Module):
+    def __init__(self, n_frames = 4, n_channels = 1280):
         super().__init__()
     
+    
+        self.n_frames = n_frames
         self.n_channels = n_channels
-        self.keys = torch.nn.Conv2d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
-        self.queries = torch.nn.Conv2d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
-        self.values = torch.nn.Conv2d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
-        self.refine = torch.nn.Conv2d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
+        self.keys = torch.nn.Conv1d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
+        self.queries = torch.nn.Conv1d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
+        self.values = torch.nn.Conv1d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
+        self.refine = torch.nn.Conv1d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
         self.softmax = torch.nn.Softmax2d()
         self.alpha = torch.nn.Parameter(torch.zeros(1))
         
-    def forward(self, x):
-        output = torch.matmul(self.softmax(torch.matmul(self.queries(x), self.keys(x))),
-                                 self.values(x))
-        output = self.refine(output)
-        output = self.alpha * output + x
-        
-        return output
+    def forward(self, x, org_seq_len, Mask = None):
+        keys = self.keys(x) # (batch_size, n_frames, n_channels)
+        queries = self.queries(x) # (batch_size, n_frames, n_channels)
+        values = self.values(x) # (batch_size, n_frames, n_channels)
+        matmul = torch.matmul(queries.permute(0, 2, 1), keys) # (batch_size, n_channels, n_frames)
+        if Mask is not None:
+            matmul = matmul.masked_fill(Mask == 0, -1e9)
+        softmax = self.softmax(matmul) # (batch_size, n_channels, n_frames)
+        attention_map = torch.matmul(values, softmax) # (batch_size, n_channels, n_frames)
+        attended_features = self.refine(attention_map) # (batch_size, n_frames, n_channels)
+        attended_features = self.alpha * attended_features + x
+        attended_features = attended_features.permute(0, 2, 1)[:, :org_seq_len, :]
+        attended_features = attended_features.mean(dim = 1)
+        return attended_features
 
 
     
-class EffnetV2_L(torch.nn.Module):
-    def __init__(self, out_features = 7, in_channels = 1, dropout = 0.4, use_sigmoid = False, use_attention = False):
+
+class EffnetV2_Key_Frame(torch.nn.Module):
+    def __init__(self, out_features = 7, in_channels = 1, dropout = 0.4, use_sigmoid = False, 
+                 use_attention = False, use_key_frame_attention = True,
+                 max_len = 8):
         super().__init__()
         
+        self.max_len = max_len
+        self.use_key_frame_attention = use_key_frame_attention
         self.use_sigmoid = use_sigmoid
         self.use_attention = use_attention
         self.dropout = dropout
@@ -68,24 +83,44 @@ class EffnetV2_L(torch.nn.Module):
         if self.use_attention:
             self.spatial_attention = SpatialAttention(feature_map_size = 16, n_channels=1280)
         self.avgpool = torch.nn.AdaptiveAvgPool2d((1, 1))
+        if self.use_key_frame_attention:
+            self.key_frame_attention = KeyFrameAttention(n_frames = 4, n_channels = 1280)
         
+    def features_padding(self, features, max_length, org_seq_len):
+        padding_length = max_length - org_seq_len
+        padded_seq = torch.nn.functional.pad(features, (0, 0, 0, padding_length, 0, 0), mode='constant', value=0)
+        return padded_seq
+    
+    def mask_sequence(self, padded_seq, org_seq_len):  
+
+        mask = torch.zeros(padded_seq.size()[:2], dtype=torch.float32)
+        # Set the non-padding elements to 1's
+        mask[:, :org_seq_len] = 1
+
+        # Expand the mask tensor to shape (1, 8, 1) and (1, 1, 8)
+        mask_1 = mask.unsqueeze(1)
+        mask_2 = mask.unsqueeze(2)
+
+        # Compute the element-wise multiplication of the two mask tensors
+        attention_mask = mask_1 * mask_2# (1, 8, 8)
+        return attention_mask
         
     def count_params(self):
         
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
         
     def forward(self, x):
+        org_seq_len = x.shape[0]
+        features = self.model.features(x)
         if self.use_attention:
-            x = self.model.features(x)
-            x = self.spatial_attention(x)
-            x = self.avgpool(x)
-            x = torch.flatten(x, 1)
-            x = self.model.classifier(x)
-        else:
-            x = self.model.features(x)
-            x = self.avgpool(x)
-            x = torch.flatten(x, 1)
-            x = self.model.classifier(x)
+            features = self.spatial_attention(features)
+        features = self.avgpool(features).squeeze(-1).permute(2, 0, 1)
+        features_padded = self.features_padding(features, self.max_len, org_seq_len)
+        mask = self.mask_sequence(features_padded, org_seq_len = x.shape[1])
+        features_padded = features_padded.permute(0, 2, 1)
+        if self.use_key_frame_attention:
+            x = self.key_frame_attention(features_padded, org_seq_len = x.shape[1], Mask = mask)
+        x = self.model.classifier(x)
         if self.use_sigmoid:
             x = self.sigmoid(x)
         return x
@@ -213,7 +248,7 @@ class EffnetV2_L_meta(torch.nn.Module):
         return out
     
     
-# model = EffnetV2_L()
-# test_tensor = torch.rand(8, 1, 512, 512)
+model = EffnetV2_Key_Frame(out_features = 7, in_channels = 1, dropout = 0.4)
+test_tensor = torch.rand(3, 1, 512, 512)
 
-# print(model(test_tensor).shape)
+print(model(test_tensor))
