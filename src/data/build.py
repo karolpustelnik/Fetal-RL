@@ -42,6 +42,26 @@ except:
     from timm.data.transforms import _pil_interp
 
 
+class MyCollate:
+    def __init__(self):
+        pass
+        
+    def __call__(self, batch):
+        images = [item[0] for item in batch]
+        Classes = [item[1] for item in batch]
+        measure = torch.stack([item[2] for item in batch])
+        ps = torch.stack([item[3] for item in batch])
+        frame_n = [item[4] for item in batch]
+        measure_scaled = torch.stack([item[5] for item in batch])
+        index = [item[6] for item in batch]
+        days_normalized = [item[7] for item in batch]
+        frame_loc = [item[8] for item in batch]
+        measure_normalized = torch.stack([item[9] for item in batch])
+        org_seq_lens = [item[10] for item in batch]
+        images_lens = [len(img) for img in images]
+        assert org_seq_lens == images_lens, 'images are not equal to org_seq_lens'
+        return images, Classes, measure, ps, frame_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized, org_seq_lens
+    
 def build_loader(config):
     config.defrost()
     dataset_train, config.MODEL.NUM_CLASSES = build_dataset(is_train=True, config=config)
@@ -61,27 +81,7 @@ def build_loader(config):
         )
     
     
-    class MyCollate:
-        def __init__(self):
-            pass
-            
-        def __call__(self, batch):
-            images = torch.concat([item[0] for item in batch])
-            Classes = torch.concat([item[1] for item in batch])
-            measure = torch.stack([item[2] for item in batch])
-            ps = torch.stack([item[3] for item in batch])
-            frame_n = [item[4] for item in batch]
-            measure_scaled = torch.stack([item[5] for item in batch])
-            index = [item[6] for item in batch]
-            days_normalized = [item[7] for item in batch]
-            frame_loc = [item[8] for item in batch]
-            measure_normalized = torch.stack([item[9] for item in batch])
-            org_seq_lens = torch.stack([item[10] for item in batch])
-            
-            return images, Classes, measure, ps, frame_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized, org_seq_lens
-
     collater = MyCollate()
-        
         
     if config.PARALLEL_TYPE == 'model_parallel':
         data_loader_train = torch.utils.data.DataLoader(
@@ -104,7 +104,7 @@ def build_loader(config):
             sampler=sampler_train,
             shuffle = False,
             batch_size=config.DATA.BATCH_SIZE,
-            num_workers=0,
+            num_workers=8,
             drop_last = True,
             collate_fn = collater)
         
@@ -113,7 +113,7 @@ def build_loader(config):
             sampler = sampler_val,
             shuffle = False,
             batch_size=config.DATA.BATCH_SIZE,
-            num_workers=0,
+            num_workers=8,
             drop_last=True if config.TRAIN.AUTO_RESUME else False,
             collate_fn = collater)
 

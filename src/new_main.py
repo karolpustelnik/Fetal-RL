@@ -172,7 +172,7 @@ def main(rank, world_size, config):
     if config.TRAIN.ACCUMULATION_STEPS > 1:
         lr_scheduler = build_scheduler(config, optimizer, len(data_loader_train) // config.TRAIN.ACCUMULATION_STEPS)
     else:
-        lr_scheduler = build_scheduler(config, optimizer, len(data_loader_train))
+        lr_scheduler = build_scheduler(config, optimizer, 36256/(config.DATA.BATCH_SIZE * config.TRAIN.NUM_FRAMES))
         
     #normed_weight = torch.load('/home/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/precision_weights.pt').cuda()
     criterion_cls = torch.nn.CrossEntropyLoss() ## changed
@@ -282,16 +282,16 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
     for idx, (images, Class, measure, ps, frames_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized, org_seq_lens) in enumerate(data_loader): ## changed
         optimizer.zero_grad()
         if config.PARALLEL_TYPE == 'ddp':
-            #with torch.autocast(device_type='cuda', dtype=torch.float16):
+            with torch.autocast(device_type='cuda', dtype=torch.float16):
                 
                 if config.MODEL.TYPE == 'effnetv2_meta':
                     meta = torch.stack((days_normalized, frame_loc), dim = 1).cuda(non_blocking=True)
                     outputs = model((images, meta)) 
                 else:
                     if config.MODEL.TYPE == 'effnetv2_key_frame' or config.MODEL.TYPE == 'effnetv2':
-                        images = images.squeeze(0)
+                        #images = images.squeeze(0)
                         #('shape of images', images.shape)
-                    outputs = model(images, org_seq_lens)
+                        outputs = model(images, org_seq_lens)
         elif config.PARALLEL_TYPE == 'model_parallel':
             #labels = labels.to('cuda:1')
             with torch.autocast(device_type='cuda', dtype=torch.float16):
@@ -373,19 +373,19 @@ def validate(config, data_loader, model, logger):
         if config.PARALLEL_TYPE == 'ddp':
             #labels = labels.cuda(non_blocking=True)
             #print(labels.shape)
-            #with torch.autocast(device_type='cuda', dtype=torch.float16):
+            with torch.autocast(device_type='cuda', dtype=torch.float16):
                 
                 if config.MODEL.TYPE == 'effnetv2_meta':
                     meta = torch.stack((days_normalized, frame_loc), dim = 1).cuda(non_blocking=True)
                     outputs = model((images, meta)) 
                 else:
                     if config.MODEL.TYPE == 'effnetv2_key_frame' or config.MODEL.TYPE == 'effnetv2':
-                        images = images.squeeze(0)
-                    outputs = model(images, org_seq_lens)
+                        #images = images.squeeze(0)
+                        outputs = model(images, org_seq_lens)
             
         elif config.PARALLEL_TYPE == 'model_parallel':
             #labels = labels.to('cuda:1')
-            #with torch.autocast(device_type='cuda', dtype=torch.float16):
+            with torch.autocast(device_type='cuda', dtype=torch.float16):
                 outputs = model((images, frames_n))
 
         # measure accuracy and record loss

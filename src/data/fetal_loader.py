@@ -414,6 +414,7 @@ class Video_Loader(data.Dataset):
         Classes = torch.stack(Classes)
         assert len(images) != 0, 'images is empty'
         #print(measure)
+        #print('images', images.shape)
         return images, Classes, measure, ps, frame_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized, torch.tensor(len(images))
     
 
@@ -461,14 +462,25 @@ class Video_Loader(data.Dataset):
 #     frame_loc = [item[8] for item in batch]
 #     measure_normalized = torch.stack([item[9] for item in batch])
 #     lens = [item[10] for item in batch]
+#     images_lens = [len(img) for img in images]
+#     assert lens == images_lens, 'images are not equal to lens'
 #     return images, Classes, measure, ps, frame_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized, lens
 
 
 # videos_data = Video_Loader(root, videos_path, ann_path)
 
-# print(len(videos_data.__getitem__(23)))
 
 # train_loader = torch.utils.data.DataLoader(videos_data, batch_size=4, shuffle=True, num_workers=0, pin_memory=True, collate_fn=my_collate)
 
 # for i in range(10):
-#     len(train_loader.__iter__().__next__())
+#     data = train_loader.__iter__().__next__()
+#     images_org = data[0]
+#     split_sizes = data[10]
+#     images = torch.cat(images_org)
+#     test_batch_unbinded = torch.split(images, split_size_or_sections = split_sizes, dim=0)
+#     assert len(test_batch_unbinded) == len(split_sizes), 'split len is not equal to batch size*frames number'
+#     for i in range(len(test_batch_unbinded)):
+#         assert len(test_batch_unbinded[i]) == split_sizes[i], 'split sizes is not equal to frames number'
+    
+    
+    

@@ -13,8 +13,8 @@ parameters:
     min: 0.0
   base_lr:
     distribution: uniform
-    max: 5.25e-04
-    min: 5.25e-09
+    max: 5.25e-06
+    min: 5.25e-10
   optimizer:
     values:
       - 'adamw'

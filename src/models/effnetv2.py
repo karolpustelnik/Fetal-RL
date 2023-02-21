@@ -53,7 +53,7 @@ class KeyFrameAttention(torch.nn.Module):
         #print('queries', queries)
         values = self.values(x) # (batch_size, n_frames, n_channels)
         #print('values', values)
-        matmul = torch.matmul(queries, keys.permute(0, 2, 1)) # (batch_size, n_channels, n_frames)
+        matmul = torch.matmul(queries, keys.permute(0, 2, 1)).float() # (batch_size, n_channels, n_frames)
         #print('matmul', matmul.shape)
         if Mask is not None:
             matmul = matmul.masked_fill(Mask == 0, -1e20)
@@ -129,22 +129,27 @@ class EffnetV2_Key_Frame(torch.nn.Module):
         
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
         
-    def forward(self, x, n_frames):
+    def forward(self, x, org_seq_len):
 
         #print('shape of x', x.shape)
-
+        x = torch.cat(x)
+        
         features = self.model.features(x)
         if self.use_attention:
             features = self.spatial_attention(features)
+        
         #print('features shape', features.shape)
         features = self.avgpool(features).squeeze(-1).permute(2, 1, 0)
         #print('features shape', features.shape)
-        tensor_list = [features[:, :, i:i+n_frames] for i, n_frames in enumerate(n_frames)]
-        features_padded = self.features_padding(tensor_list, self.max_len, n_frames)
+        #print('features shape', features.shape)
+        tensor_list = torch.split(features, split_size_or_sections = org_seq_len, dim=2)
+        
+        features_padded = self.features_padding(tensor_list, self.max_len, org_seq_len)
+        #print('features_padded shape', features_padded.shape)
         #print('features_padded shape', features_padded.shape)
         features_padded = features_padded.squeeze(1)
         #print('features_padded shape', features_padded.shape)
-        mask = self.mask_sequence(features_padded, org_seq_lens = n_frames).cuda() if torch.cuda.is_available() else self.mask_sequence(features_padded, org_seq_lens = n_frames)
+        mask = self.mask_sequence(features_padded, org_seq_lens = org_seq_len).cuda() if torch.cuda.is_available() else self.mask_sequence(features_padded, org_seq_lens = org_seq_len)
         #print('mask shape', mask.shape)
         
         if self.use_key_frame_attention:
@@ -293,6 +298,6 @@ class EffnetV2_L_meta(torch.nn.Module):
     
     
 # model = EffnetV2_Key_Frame(out_features = 1, in_channels = 1, dropout = 0.4, use_key_frame_attention=True)
-# test_tensor = torch.rand(13, 1, 512, 512)
 # split_sizes = [3, 2, 4, 4]
-# print(model(test_tensor, split_sizes))
+# org_batch = [torch.rand(i, 1, 512, 512) for i in split_sizes]
+# print(model(org_batch, split_sizes))
