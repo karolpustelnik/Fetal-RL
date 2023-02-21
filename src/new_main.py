@@ -99,6 +99,8 @@ def parse_option():
     parser.add_argument("--sigmoid", help='whether to use sigmoid')
     parser.add_argument("--attention", help='whether to use spatial attention')
     parser.add_argument("--loss", type = str, help='loss function')
+    parser.add_argument('--key_frame_attention', help='whether to use key frame attention')
+    parser.add_argument('--num_frames', type = int, help='num frames to use during training')
     
     args, unparsed = parser.parse_known_args()
 
@@ -124,7 +126,7 @@ def main(rank, world_size, config):
     linear_scaled_lr = float(config.TRAIN.BASE_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
     linear_scaled_warmup_lr = float(config.TRAIN.WARMUP_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
     linear_scaled_min_lr = float(config.TRAIN.MIN_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
-    name = config.MODEL.NAME + f"_bs{config.DATA.BATCH_SIZE}_lr{config.TRAIN.BASE_LR}_opt{config.TRAIN.OPTIMIZER.NAME}_loss{config.MODEL.LOSS}_augm{config.DATA.AUGM}_drop{config.MODEL.DROP_RATE}_scaling{config.DATA.IMG_SCALING}_sigmoid{config.MODEL.SIGMOID}_attention{config.MODEL.ATTENTION}"
+    name = config.MODEL.NAME + f"_bs{config.DATA.BATCH_SIZE}_lr{config.TRAIN.BASE_LR}_augm{config.DATA.AUGM}_drop{config.MODEL.DROP_RATE}_n_frames{config.TRAIN.NUM_FRAMES}"
     output = os.path.join(config.OUTPUT, name, config.TAG)
     config.defrost()
     config.DATA.BATCH_SIZE = config.DATA.BATCH_SIZE * dist.get_world_size()
@@ -232,7 +234,6 @@ def main(rank, world_size, config):
     if config.EVAL_MODE == False:
         for epoch in range(config.TRAIN.START_EPOCH, config.TRAIN.EPOCHS):
             data_loader_train.sampler.set_epoch(epoch) if config.PARALLEL_TYPE == 'ddp' else None
-
             train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader_train, optimizer, epoch, mixup_fn, lr_scheduler,
                             loss_scaler, logger)
             if dist.get_rank() == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
@@ -243,9 +244,10 @@ def main(rank, world_size, config):
                 if rank == 0:
                     wandb.log({'val_acc': acc1_meter, 'val_f1_score': f1_score_meter, 'val_recall': recall_meter, 'val_precision': precision_meter}, step = epoch)
             elif config.MODEL.TASK_TYPE == 'reg':
-                mae_meter, mape_meter, rmse_meter, loss_meter_reg = validate(config, data_loader_val, model, logger)
-                if rank == 0:
-                    wandb.log({'val_mae': mae_meter, 'val_mape': mape_meter, 'val_rmse': rmse_meter, 'val_loss': loss_meter_reg}, step = epoch)
+                if epoch%8 == 0:
+                    mae_meter, mape_meter, rmse_meter, loss_meter_reg = validate(config, data_loader_val, model, logger)
+                    if rank == 0:
+                        wandb.log({'val_mae': mae_meter, 'val_mape': mape_meter, 'val_rmse': rmse_meter, 'val_loss': loss_meter_reg}, step = epoch)
             
     elif config.EVAL_MODE == True:
         acc1, f1_score, recall, precision,  loss_cls, loss_reg = validate(config, data_loader_val, model, logger)
@@ -277,16 +279,19 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
     
     start = time.time()
     end = time.time()
-    for idx, (images, Class, measure, ps, frames_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized) in enumerate(data_loader): ## changed
+    for idx, (images, Class, measure, ps, frames_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized, org_seq_lens) in enumerate(data_loader): ## changed
         optimizer.zero_grad()
         if config.PARALLEL_TYPE == 'ddp':
-            with torch.autocast(device_type='cuda', dtype=torch.float16):
+            #with torch.autocast(device_type='cuda', dtype=torch.float16):
                 
                 if config.MODEL.TYPE == 'effnetv2_meta':
                     meta = torch.stack((days_normalized, frame_loc), dim = 1).cuda(non_blocking=True)
                     outputs = model((images, meta)) 
                 else:
-                    outputs = model(images)
+                    if config.MODEL.TYPE == 'effnetv2_key_frame' or config.MODEL.TYPE == 'effnetv2':
+                        images = images.squeeze(0)
+                        #('shape of images', images.shape)
+                    outputs = model(images, org_seq_lens)
         elif config.PARALLEL_TYPE == 'model_parallel':
             #labels = labels.to('cuda:1')
             with torch.autocast(device_type='cuda', dtype=torch.float16):
@@ -363,7 +368,7 @@ def validate(config, data_loader, model, logger):
     rmse_meter = AverageMeter()
 
     worst_losses = []
-    for idx, (images, Class, measure, ps, frames_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized) in enumerate(data_loader):
+    for idx, (images, Class, measure, ps, frames_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized, org_seq_lens) in enumerate(data_loader):
         #images = images.to(torch.float32)
         if config.PARALLEL_TYPE == 'ddp':
             #labels = labels.cuda(non_blocking=True)
@@ -374,7 +379,9 @@ def validate(config, data_loader, model, logger):
                     meta = torch.stack((days_normalized, frame_loc), dim = 1).cuda(non_blocking=True)
                     outputs = model((images, meta)) 
                 else:
-                    outputs = model(images)
+                    if config.MODEL.TYPE == 'effnetv2_key_frame' or config.MODEL.TYPE == 'effnetv2':
+                        images = images.squeeze(0)
+                    outputs = model(images, org_seq_lens)
             
         elif config.PARALLEL_TYPE == 'model_parallel':
             #labels = labels.to('cuda:1')

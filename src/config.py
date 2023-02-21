@@ -32,7 +32,7 @@ _C.DATA.DATASET = 'imagenet'
 
 _C.DATA.VIDEOS_TRAIN = 'videos_train'
 _C.DATA.VIDEOS_VAL = 'videos_val'
-
+_C.DATA.VIDEOS_TEST = 'videos_test'
 _C.DATA.IMG_SCALING = True
 # whether use augmentation
 
@@ -64,6 +64,8 @@ _C.MODEL.NUM_CLASSES = 7
 # Dropout rate
 _C.MODEL.DROP_RATE = 0.0
 
+_C.MODEL.KEY_FRAME_ATTENTION = True
+
 _C.MODEL.SIGMOID = False
 _C.MODEL.ATTENTION = False
 # Task type
@@ -90,6 +92,7 @@ _C.TRAIN.WARMUP_LR = 5e-7
 _C.TRAIN.MIN_LR = 5e-6
 # Clip gradient norm
 _C.TRAIN.CLIP_GRAD = 5.0
+_C.TRAIN.NUM_FRAMES = 4
 # Auto resume from latest checkpoint
 _C.TRAIN.AUTO_RESUME = True
 # Gradient accumulation steps
@@ -218,6 +221,10 @@ def update_config(config, args):
         config.MODEL.LOSS = args.loss
     if args.attention:
         config.MODEL.ATTENTION = True if args.attention == 'True' else False
+    if args.key_frame_attention:
+        config.MODEL.KEY_FRAME_ATTENTION = True if args.key_frame_attention == 'True' else False
+    if args.num_frames:
+        config.TRAIN.NUM_FRAMES = args.num_frames
 
     
 

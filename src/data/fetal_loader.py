@@ -321,9 +321,11 @@ class Fetal_frame(data.Dataset):
         return images, Classes, measures, pss, frame_n, measure_normalized, indexes
                       
     
-class Video_Loader():
-    def __init__(self, root, videos_path, ann_path, transform=None, target_transform=None, img_scaling = False):
+class Video_Loader(data.Dataset):
+    def __init__(self, root, videos_path, ann_path, transform=None, target_transform=None, img_scaling = False, num_frames = 4):
         
+        self.num_frames = num_frames
+        self.transform = transform
         self.data_path = root
         self.ann_path = ann_path
         self.videos = pd.read_csv(videos_path)
@@ -336,13 +338,13 @@ class Video_Loader():
             im = Image.open(path)
             im.convert('RGB')
         except:
-            print("ERROR IMG LOADED: ", path)
+            print("ERROR IMG NOT LOADED: ", path)
             random_img = np.random.rand(224, 224, 3) * 255
             im = Image.fromarray(np.uint8(random_img))
         return im
     
     def __len__(self):
-        return len(self.data)
+        return len(self.videos)
     
     
     def _load_item(self, index):
@@ -352,7 +354,8 @@ class Video_Loader():
         Returns:
             tuple: (image, target) where target is class_index of the target class.
         """
-        idb = self.data.iloc[index]
+        idb = self.data.query('index == @index').iloc[0]
+        
         frame_idx = idb[0]
         Class = torch.tensor(idb[1])
         video = idb[2]
@@ -366,7 +369,6 @@ class Video_Loader():
         width = torch.tensor(idb[10])
         measure_normalized = torch.tensor(idb[13], dtype=torch.float32)
         images = self._load_image(self.data_path  + frame_idx + '.png')
-        
         new_height = clamp(int(height*2.161191086437513), 0, 512)
         new_width = clamp(int(width*2.161191086437513), 0, 512)
         if self.img_scaling:
@@ -387,183 +389,35 @@ class Video_Loader():
             images = t(images)
         if self.transform is not None:
             images = self.transform(images)
-
         return images, Class, measure, ps, frames_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized
     
     
     def __getitem__(self, index):
-        video = self.videos[index]
-        batch = self.data[self.data['video'] == video].sample(8)
-        indexes = batch['index']
+        video = self.videos.iloc[index].values[0]
+        
+        batch = self.data[self.data['video'] == video] #if len(self.data[self.data['video'] == video]) > 3 else self.data[self.data['video'] == video]
+        batch_len = len(batch)
+        #print('batch_len', batch_len)
+        starting_position = np.random.randint(0, batch_len - self.num_frames) if batch_len > self.num_frames else 0
+        #print('starting_position', starting_position)
+        batch_sample = batch[starting_position:starting_position+self.num_frames] if batch_len > self.num_frames else batch
+        #print('batch_sample', batch_sample)
+        ids = batch_sample['index']
         images = list()
         Classes = list()
-        measures = list()
-        pss = list()
-        frames_n = list()
-        measures_normalized = list()
-        indexes = list()
-        days = list()
-        frames_loc = list()
-        for i in indexes:
+        for i in ids:
+            #print(i)
             image, Class, measure, ps, frame_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized = self._load_item(i)
             images.append(image)
             Classes.append(Class)
-            measures.append(measure)
-            pss.append(ps)
-            frames_n.append(frame_n)
-            measures.append(measure_scaled)
-            indexes.append(index)
-            days.append(days_normalized)
-            frames_loc.append(frame_loc)
-            measures_normalized.append(measure_normalized)
-        return images, Class, measures, ps, frames_n, measure_scaled, index, days, frame_loc, measure_normalized
+        images = torch.stack(images)
+        Classes = torch.stack(Classes)
+        assert len(images) != 0, 'images is empty'
+        #print(measure)
+        return images, Classes, measure, ps, frame_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized, torch.tensor(len(images))
     
 
-class Fetal_vid_new(data.Dataset):
-    def __init__(self, videos_path, root, ann_path, transform=None, target_transform=None):
-        
-        
-        self.videos = pd.read_csv(videos_path)
-        self.data_path = root
-        self.ann_path = ann_path
-        self.transform = transform
-        self.target_transform = target_transform
-        self.database = pd.read_csv(self.ann_path)
-        
-    def _load_image(self, path):
-        try:
-            im = Image.open(path)
-            im.convert('RGB')
-        except:
-            print("!!ERROR IMG NOT LOADED!!: ", path)
-            random_img = np.random.rand(224, 224, 3) * 255
-            im = Image.fromarray(np.uint8(random_img))
-        return im
 
-    def __getitem__(self, index):
-        """
-        Args:
-            index (int): Index
-        Returns:
-            tuple: (image, frame_positions, labels)
-        """
-        #index, Class, video, FL, femur_ps, frames_n
-        images = list() # list of images
-        vid = self.videos.iloc[index][0]
-        vid_len = self.database.query('video == @vid')['frames_n'].iloc[0]
-        Class = self.database.query('video == @vid')['Class'].iloc[0]
-        part = 'head_ps' if Class == 2 else 'abdomen_ps' if Class == 4 else 'femur_ps'
-        ps = self.database.query('video == @vid')['abdomen_ps'].iloc[0]
-        indexes = self.database.query('video == @vid')['index']
-        length = 'HC' if Class == 2 else 'AC' if Class == 4 else 'FL'
-        measure = self.database.query('video == @vid')['length'].iloc[0]
-        measure_scaled = measure/ps
-        # Max measure scaled: head = 214.14944514917548
-        # max measure scaled: abdomen = 217.2456030876609
-        # max measure scaled: femur = 72.1250937626219
-        max_measure = 214.14944514917548 if Class == 2 else 217.2456030876609 if Class == 4 else 72.1250937626219
-        measure_normalized = measure_scaled/max_measure
-        #print(self.database.query(vid[0]))
-        #index, #class, #video, #frames_n, abdomen_ps, AC
-        # images
-        buckets = round(vid_len/8)
-        indexes.index = [i for i in range(vid_len)]
-        
-        for frame in range(0, vid_len, buckets):
-            #print(frame)
-            frame_idx = indexes.iloc[frame]
-            image = self._load_image(self.data_path  + frame_idx + '.png')
-            # transform image              
-            if self.transform is not None:
-                image = self.transform(image)
-            images.append(image) # append image to list
-
-
-        # target
-        #save_image(images[0], '/data/kpusteln/examples' + str(index) + '.png')
-        images = images[:8]
-        images = torch.stack(images)
-        images = images.permute(1, 0, 2, 3)
-        frames_position = [i+1 for i in range(8)]
-        frames_position = torch.tensor(frames_position)
-        
-        return images, index, Class, vid, measure, ps, vid_len, measure_normalized
-
-    def __len__(self):
-        return len(self.videos)
-
-
-class Fetal_vid_old(data.Dataset):
-    def __init__(self, videos_path, root, ann_path, transform=None, target_transform=None):
-        
-        
-        self.videos = pd.read_csv(videos_path)
-        self.data_path = root
-        self.ann_path = ann_path
-        self.transform = transform
-        self.target_transform = target_transform
-        self.database = pd.read_csv(self.ann_path)
-        
-    def _load_image(self, path):
-        try:
-            im = Image.open(path)
-            im.convert('RGB')
-        except:
-            print("ERROR IMG NOT LOADED: ", path)
-            random_img = np.random.rand(224, 224, 3) * 255
-            im = Image.fromarray(np.uint8(random_img))
-        return im
-
-    def __getitem__(self, index):
-        """
-        Args:
-            index (int): Index
-        Returns:
-            tuple: (image, frame_positions, labels)
-        """
-        #index, Class, video, FL, femur_ps, frames_n
-        images = list() # list of images
-        frames_classes = list()
-        vid = self.videos.iloc[index][0]
-        vid_len = self.database.query('video == @vid')['frames_n'].iloc[0]
-        Classes = self.database.query('video == @vid')['Class']
-        #part = 'head_ps' if Class == 2 else 'ps' if Class == 4 else 'femur_ps'
-        ps = self.database.query('video == @vid')['ps'].iloc[0]
-        indexes = self.database.query('video == @vid')['index']
-        #length = 'HC' if Class == 2 else 'AC' if Class == 4 else 'FL'
-        measure = self.database.query('video == @vid')['measure'].iloc[0]
-        measure_normalized = self.database.query('video == @vid')['measure_scaled'].iloc[0]
-        
-        for frame in range(0, vid_len):
-            #print(frame)
-            frame_idx = indexes.iloc[frame]
-            frame_class = Classes.iloc[frame]
-            image = self._load_image(self.data_path  + frame_idx + '.png')
-            # transform image              
-            if self.transform is not None:
-                image = self.transform(image)
-            images.append(image) # append image to list
-            frames_classes.append(frame_class)
-
-            
-            
-
-        # target
-        frames_position = [i+1 for i in range(vid_len)]
-        #save_image(images[0], '/data/kpusteln/examples' + str(index) + '.png')
-        images = torch.stack(images)
-        frames_classes = torch.tensor(frames_classes)
-        images = images.permute(1, 0, 2, 3)
-        frames_position = torch.tensor(frames_position)
-        #cut to max 400 frames
-        images = images[:, :64, :, :]
-        frames_classes = frames_classes[:64]
-        print(f'shape of frames_classes: {frames_classes.shape}')
-
-        return images, index, frames_classes, vid, measure, ps, vid_len, measure_normalized
-
-    def __len__(self):
-        return len(self.videos)
     
     
 # fetal_frame = Fetal_frame('/data/kpusteln/fetal/fetal_extracted/', 
@@ -579,11 +433,42 @@ class Fetal_vid_old(data.Dataset):
 # buffer = torch.cat((buffer, labels[labels == 4]))
 # buffer = torch.cat((buffer, labels[labels == 6]))
 
-# batch = []
-# for element in fetal_frame.load_batch(buffer.tolist()):
-#     print(element)
+# # batch = []
+# # for element in fetal_frame.load_batch(buffer.tolist()):
+# #     print(element)
     
-# list = [i for i in range(40)]
+# # # list = [i for i in range(40)]
 
-# del list[0:32]
-# print(list)
+# # # del list[0:32]
+# # # print(list)
+# # import random
+# # np.random.seed(1)
+# # random.seed(1)
+# root = '/data/kpusteln/fetal/fetal_extracted/'
+# videos_path = '/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/all/videos_train.csv'
+# ann_path = '/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/all/biometry_train_scaled_size_all.csv'
+
+
+# def my_collate(batch):
+#     images = [item[0] for item in batch]
+#     Classes = [item[1] for item in batch]
+#     measure = torch.stack([item[2] for item in batch])
+#     ps = torch.stack([item[3] for item in batch])
+#     frame_n = [item[4] for item in batch]
+#     measure_scaled = torch.stack([item[5] for item in batch])
+#     index = [item[6] for item in batch]
+#     days_normalized = [item[7] for item in batch]
+#     frame_loc = [item[8] for item in batch]
+#     measure_normalized = torch.stack([item[9] for item in batch])
+#     lens = [item[10] for item in batch]
+#     return images, Classes, measure, ps, frame_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized, lens
+
+
+# videos_data = Video_Loader(root, videos_path, ann_path)
+
+# print(len(videos_data.__getitem__(23)))
+
+# train_loader = torch.utils.data.DataLoader(videos_data, batch_size=4, shuffle=True, num_workers=0, pin_memory=True, collate_fn=my_collate)
+
+# for i in range(10):
+#     len(train_loader.__iter__().__next__())

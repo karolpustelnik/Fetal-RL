@@ -20,7 +20,7 @@ class SpatialAttention(torch.nn.Module):
     def forward(self, x):
         
         attended_features = torch.matmul(self.softmax(torch.matmul(self.keys(x).view(x.size(0), self.n_channels, -1).permute(0, 2, 1), 
-                                                                   self.queries(x).view(x.size(0), self.n_channels, -1))), 
+                                                                   self.queries(x).view(x.size(0), self.n_channels, -1))/self.n_channels**0.5), 
                                          self.values(x).view(x.size(0), self.n_channels, -1).permute(0, 2, 1)) # (batch_size, feature_map_size * feature_map_size, n_channels)
         attended_features = attended_features.permute(0, 2, 1).view(x.size(0), self.n_channels, self.feature_map_size, self.feature_map_size) # (batch_size, n_channels, feature_map_size, feature_map_size)
         attended_features = self.refine(attended_features)
@@ -37,26 +37,41 @@ class KeyFrameAttention(torch.nn.Module):
     
         self.n_frames = n_frames
         self.n_channels = n_channels
-        self.keys = torch.nn.Conv1d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
-        self.queries = torch.nn.Conv1d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
-        self.values = torch.nn.Conv1d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
-        self.refine = torch.nn.Conv1d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
-        self.softmax = torch.nn.Softmax2d()
-        self.alpha = torch.nn.Parameter(torch.zeros(1))
+        self.keys = torch.nn.Linear(self.n_channels, self.n_channels)
+        self.queries = torch.nn.Linear(self.n_channels, self.n_channels)
+        self.values = torch.nn.Linear(self.n_channels, self.n_channels)
+        self.refine = torch.nn.Linear(self.n_channels, self.n_channels)
+        self.softmax = torch.nn.Softmax(dim=-1)
+        #self.alpha = torch.nn.Parameter(torch.zeros(1))
         
-    def forward(self, x, org_seq_len, Mask = None):
+    def forward(self, x, Mask = None):
+        # x shape: 
+        #print('x shape', x.shape)
         keys = self.keys(x) # (batch_size, n_frames, n_channels)
+        #print('keys', keys.shape)
         queries = self.queries(x) # (batch_size, n_frames, n_channels)
+        #print('queries', queries)
         values = self.values(x) # (batch_size, n_frames, n_channels)
-        matmul = torch.matmul(queries.permute(0, 2, 1), keys) # (batch_size, n_channels, n_frames)
+        #print('values', values)
+        matmul = torch.matmul(queries, keys.permute(0, 2, 1)) # (batch_size, n_channels, n_frames)
+        #print('matmul', matmul.shape)
         if Mask is not None:
-            matmul = matmul.masked_fill(Mask == 0, -1e9)
-        softmax = self.softmax(matmul) # (batch_size, n_channels, n_frames)
-        attention_map = torch.matmul(values, softmax) # (batch_size, n_channels, n_frames)
-        attended_features = self.refine(attention_map) # (batch_size, n_frames, n_channels)
-        attended_features = self.alpha * attended_features + x
-        attended_features = attended_features.permute(0, 2, 1)[:, :org_seq_len, :]
-        attended_features = attended_features.mean(dim = 1)
+            matmul = matmul.masked_fill(Mask == 0, -1e20)
+            #print('matmul masked', matmul)
+        #print('matmul shape', matmul.shape)
+        softmax = self.softmax(matmul/(self.n_channels) ** 0.5) # (batch_size, n_channels, n_frames)
+        attention_map = torch.matmul(values.permute(0, 2, 1), softmax) # (batch_size, n_channels, n_frames)
+        #print('attention_map', attention_map.shape)
+        #print('attention_map', attention_map)
+        attended_features = self.refine(attention_map.permute(0, 2, 1)) # (batch_size, n_frames, n_channels)
+        #print('attended_features', attended_features)
+        #attended_features = attended_features + x
+        #print('attended_features', attended_features)
+        #attended_features = attended_features[:, :org_seq_len, :]
+        #attended_features = attended_features.permute(0, 2, 1)
+        #print('attended_features', attended_features)
+        #print('attended_features', attended_features.shape)
+        #print('attended_features', attended_features)
         return attended_features
 
 
@@ -64,13 +79,13 @@ class KeyFrameAttention(torch.nn.Module):
 
 class EffnetV2_Key_Frame(torch.nn.Module):
     def __init__(self, out_features = 7, in_channels = 1, dropout = 0.4, use_sigmoid = False, 
-                 use_attention = False, use_key_frame_attention = True,
-                 max_len = 8):
+                 use_attention = True, use_key_frame_attention = False,
+                 max_len = 4):
         super().__init__()
         
         self.max_len = max_len
         self.use_key_frame_attention = use_key_frame_attention
-        self.use_sigmoid = use_sigmoid
+        self.use_sigmoid = use_sigmoid 
         self.use_attention = use_attention
         self.dropout = dropout
         self.out_features = out_features
@@ -86,62 +101,88 @@ class EffnetV2_Key_Frame(torch.nn.Module):
         if self.use_key_frame_attention:
             self.key_frame_attention = KeyFrameAttention(n_frames = 4, n_channels = 1280)
         
-    def features_padding(self, features, max_length, org_seq_len):
-        padding_length = max_length - org_seq_len
-        padded_seq = torch.nn.functional.pad(features, (0, 0, 0, padding_length, 0, 0), mode='constant', value=0)
-        return padded_seq
+    def features_padding(self, features, max_length, split_sizes):
+        padded_output = []
+        for i, feature in enumerate(features):
+            padding_length = max_length - split_sizes[i]
+            padded_seq = torch.nn.functional.pad(feature, (0, padding_length, 0, 0, 0, 0), mode='constant', value=0)
+            padded_output.append(padded_seq)
+        padded_output = torch.stack(padded_output)
+        return padded_output
     
-    def mask_sequence(self, padded_seq, org_seq_len):  
-
-        mask = torch.zeros(padded_seq.size()[:2], dtype=torch.float32)
+    def mask_sequence(self, padded_seq, org_seq_lens):  
+        
+        # Define the padded sequence
+        padded_seq_len = padded_seq.size(-1)
+        batch_len = padded_seq.size(0)
+        # Define the mask tensor
+        mask = torch.zeros((batch_len, padded_seq_len, padded_seq_len), dtype=torch.float32)
+        
         # Set the non-padding elements to 1's
-        mask[:, :org_seq_len] = 1
-
-        # Expand the mask tensor to shape (1, 8, 1) and (1, 1, 8)
-        mask_1 = mask.unsqueeze(1)
-        mask_2 = mask.unsqueeze(2)
-
-        # Compute the element-wise multiplication of the two mask tensors
-        attention_mask = mask_1 * mask_2# (1, 8, 8)
-        return attention_mask
+        for i in range(batch_len):
+            mask[i, :, :org_seq_lens[i]] = 1
+        
+        
+        return mask
         
     def count_params(self):
         
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
         
-    def forward(self, x):
-        org_seq_len = x.shape[0]
+    def forward(self, x, n_frames):
+
+        #print('shape of x', x.shape)
+
         features = self.model.features(x)
         if self.use_attention:
             features = self.spatial_attention(features)
-        features = self.avgpool(features).squeeze(-1).permute(2, 0, 1)
-        features_padded = self.features_padding(features, self.max_len, org_seq_len)
-        mask = self.mask_sequence(features_padded, org_seq_len = x.shape[1])
-        features_padded = features_padded.permute(0, 2, 1)
+        #print('features shape', features.shape)
+        features = self.avgpool(features).squeeze(-1).permute(2, 1, 0)
+        #print('features shape', features.shape)
+        tensor_list = [features[:, :, i:i+n_frames] for i, n_frames in enumerate(n_frames)]
+        features_padded = self.features_padding(tensor_list, self.max_len, n_frames)
+        #print('features_padded shape', features_padded.shape)
+        features_padded = features_padded.squeeze(1)
+        #print('features_padded shape', features_padded.shape)
+        mask = self.mask_sequence(features_padded, org_seq_lens = n_frames).cuda() if torch.cuda.is_available() else self.mask_sequence(features_padded, org_seq_lens = n_frames)
+        #print('mask shape', mask.shape)
+        
         if self.use_key_frame_attention:
-            x = self.key_frame_attention(features_padded, org_seq_len = x.shape[1], Mask = mask)
-        x = self.model.classifier(x)
+            x = self.key_frame_attention(features_padded.permute(0, 2, 1), Mask = mask)
+            x = self.model.classifier(x)
+        else:
+            #print(features_padded.shape)
+            features_padded = features_padded.mean(dim = 1)
+            #print(features_padded.shape)
+            x = self.model.classifier(features_padded)
+            #print('x shape in else', x.shape)
+            #print(x.shape)
         if self.use_sigmoid:
             x = self.sigmoid(x)
+        x = x.mean(dim = 1)
+    #print('x', x.shape)
         return x
 
 
-class EffnetV2_L_cbam(torch.nn.Module):
-    def __init__(self, out_features = 7, in_channels = 1, dropout = 0.4):
+        
+    
+class EffnetV2_L(torch.nn.Module):
+    def __init__(self, out_features = 7, in_channels = 1, dropout = 0.4, use_sigmoid = False, use_attention = False):
         super().__init__()
         
+        self.use_sigmoid = use_sigmoid
+        self.use_attention = use_attention
         self.dropout = dropout
         self.out_features = out_features
         self.in_channels = in_channels
         self.model = efficientnet_v2_l(weights = 'EfficientNet_V2_L_Weights.IMAGENET1K_V1')
         self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
-        self.model.classifier = torch.nn.Identity()
-        self.cbam = CBAMBlock(channel=1280, reduction=64, kernel_size=16*16)
+        self.model.avgpool = torch.nn.Identity()
         self.model.classifier = torch.nn.Sequential(nn.Dropout(self.dropout), nn.Linear(1280, self.out_features))
-        self.linear = torch.nn.Linear(16*16, 1)
         self.sigmoid = torch.nn.Sigmoid()
-        #self.classifier = torch.nn.Sequential(nn.Dropout(0.4), nn.Linear(1280, self.out_features))
-        
+        if self.use_attention:
+            self.spatial_attention = SpatialAttention(feature_map_size = 16, n_channels=1280)
+        self.avgpool = torch.nn.AdaptiveAvgPool2d((1, 1))
         
         
     def count_params(self):
@@ -149,16 +190,19 @@ class EffnetV2_L_cbam(torch.nn.Module):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
         
     def forward(self, x):
-        x = self.model.features(x)
-        x = self.cbam(x)
-        #print(x.shape)
-        x = x.view(x.size(0), 1280, -1)
-        #print(x.shape)
-        x = self.linear(x)
-        x = x.squeeze(-1)
-        #print(x.shape)
-        x = self.model.classifier(x)
-        x = self.sigmoid(x)
+        if self.use_attention:
+            x = self.model.features(x)
+            x = self.spatial_attention(x)
+            x = self.avgpool(x)
+            x = torch.flatten(x, 1)
+            x = self.model.classifier(x)
+        else:
+            x = self.model.features(x)
+            x = self.avgpool(x)
+            x = torch.flatten(x, 1)
+            x = self.model.classifier(x)
+        if self.use_sigmoid:
+            x = self.sigmoid(x)
         return x
 
 
@@ -248,7 +292,7 @@ class EffnetV2_L_meta(torch.nn.Module):
         return out
     
     
-model = EffnetV2_Key_Frame(out_features = 7, in_channels = 1, dropout = 0.4)
-test_tensor = torch.rand(3, 1, 512, 512)
-
-print(model(test_tensor))
+# model = EffnetV2_Key_Frame(out_features = 1, in_channels = 1, dropout = 0.4, use_key_frame_attention=True)
+# test_tensor = torch.rand(13, 1, 512, 512)
+# split_sizes = [3, 2, 4, 4]
+# print(model(test_tensor, split_sizes))

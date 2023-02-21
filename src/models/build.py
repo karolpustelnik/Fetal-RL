@@ -9,7 +9,7 @@
 from .effnet_longformer import EFL
 from .UniNet import UniNetB6
 from .vit import ViT
-from .effnetv2 import EffnetV2_L, EffnetV2_L_meta, EffnetV2_L_cbam
+from .effnetv2 import EffnetV2_L_meta, EffnetV2_Key_Frame, EffnetV2_L
 from .efficient_ete import EffnetEtE
 from .metaformer_baselines import CA_former
 def build_model(config):
@@ -35,6 +35,10 @@ def build_model(config):
         model = EffnetV2_L_meta(out_features = config.MODEL.NUM_CLASSES, dropout= config.MODEL.DROP_RATE)
     elif model_type == 'caformer':
         model = CA_former(out_features = config.MODEL.NUM_CLASSES)
+    elif model_type == 'effnetv2_key_frame':
+        model = EffnetV2_Key_Frame(out_features = config.MODEL.NUM_CLASSES, dropout= config.MODEL.DROP_RATE, 
+                                   use_sigmoid = config.MODEL.SIGMOID, use_attention = config.MODEL.ATTENTION,
+                                   use_key_frame_attention=config.MODEL.KEY_FRAME_ATTENTION)
         
         
     return model

@@ -5,6 +5,9 @@
 # Written by Ze Liu
 # --------------------------------------------------------
 
+
+import dill
+import dill as pickle
 import os
 import torch
 import numpy as np
@@ -14,7 +17,7 @@ from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.data import Mixup
 from timm.data import create_transform
 
-from .fetal_loader import Fetal_frame, Fetal_vid_old, Fetal_vid_new, Fetal_frame_eval_reg, Fetal_frame_eval_cls
+from .fetal_loader import Fetal_frame, Fetal_frame_eval_reg, Fetal_frame_eval_cls, Video_Loader
 
 try:
     from torchvision.transforms import InterpolationMode
@@ -56,7 +59,30 @@ def build_loader(config):
     sampler_val = torch.utils.data.distributed.DistributedSampler(
             dataset_val, shuffle=False
         )
+    
+    
+    class MyCollate:
+        def __init__(self):
+            pass
+            
+        def __call__(self, batch):
+            images = torch.concat([item[0] for item in batch])
+            Classes = torch.concat([item[1] for item in batch])
+            measure = torch.stack([item[2] for item in batch])
+            ps = torch.stack([item[3] for item in batch])
+            frame_n = [item[4] for item in batch]
+            measure_scaled = torch.stack([item[5] for item in batch])
+            index = [item[6] for item in batch]
+            days_normalized = [item[7] for item in batch]
+            frame_loc = [item[8] for item in batch]
+            measure_normalized = torch.stack([item[9] for item in batch])
+            org_seq_lens = torch.stack([item[10] for item in batch])
+            
+            return images, Classes, measure, ps, frame_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized, org_seq_lens
 
+    collater = MyCollate()
+        
+        
     if config.PARALLEL_TYPE == 'model_parallel':
         data_loader_train = torch.utils.data.DataLoader(
             dataset_train, 
@@ -78,16 +104,18 @@ def build_loader(config):
             sampler=sampler_train,
             shuffle = False,
             batch_size=config.DATA.BATCH_SIZE,
-            num_workers=2,
-            drop_last = True)
+            num_workers=0,
+            drop_last = True,
+            collate_fn = collater)
         
         data_loader_val = torch.utils.data.DataLoader(
             dataset_val, 
             sampler = sampler_val,
             shuffle = False,
             batch_size=config.DATA.BATCH_SIZE,
-            num_workers=2,
-            drop_last=False)
+            num_workers=0,
+            drop_last=True if config.TRAIN.AUTO_RESUME else False,
+            collate_fn = collater)
 
 
     # setup mixup / cutmix
@@ -114,8 +142,12 @@ def build_dataset(is_train, config):
         nb_classes = config.MODEL.NUM_CLASSES
         
     elif config.PARALLEL_TYPE == 'ddp':
+        if config.MODEL.TYPE == 'effnetv2_key_frame' or config.MODEL.TYPE == 'effnetv2':
+            dataset = Video_Loader(root = config.DATA.DATA_PATH, videos_path = videos_path,ann_path = ann_path, 
+                                   transform = transform, img_scaling = config.DATA.IMG_SCALING, num_frames = config.TRAIN.NUM_FRAMES)
+        else:
             dataset = Fetal_frame(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform, img_scaling = config.DATA.IMG_SCALING)
-            nb_classes = config.MODEL.NUM_CLASSES
+        nb_classes = config.MODEL.NUM_CLASSES
     if config.TRAIN.AUTO_RESUME == False:
         if config.MODEL.TASK_TYPE == 'reg':
             dataset = Fetal_frame_eval_reg(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform)
