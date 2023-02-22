@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 from torchvision.models import efficientnet_v2_l
+from .efficient_net_group_norm import effnetv2_m, effnetv2_l, effnetv2_xl
+from torch.utils.checkpoint import checkpoint
 #from .cbam import CBAMBlock
 
 class SpatialAttention(torch.nn.Module):
@@ -90,8 +92,8 @@ class EffnetV2_Key_Frame(torch.nn.Module):
         self.dropout = dropout
         self.out_features = out_features
         self.in_channels = in_channels
-        self.model = efficientnet_v2_l(weights = 'EfficientNet_V2_L_Weights.IMAGENET1K_V1')
-        self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+        self.model = effnetv2_l()
+        #self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
         self.model.avgpool = torch.nn.Identity()
         self.model.classifier = torch.nn.Sequential(nn.Dropout(self.dropout), nn.Linear(1280, self.out_features))
         self.sigmoid = torch.nn.Sigmoid()
@@ -135,12 +137,12 @@ class EffnetV2_Key_Frame(torch.nn.Module):
         x = torch.cat(x)
         
         features = self.model.features(x)
+        features = self.model.conv(features)
         if self.use_attention:
             features = self.spatial_attention(features)
         
         #print('features shape', features.shape)
         features = self.avgpool(features).squeeze(-1).permute(2, 1, 0)
-        #print('features shape', features.shape)
         #print('features shape', features.shape)
         tensor_list = torch.split(features, split_size_or_sections = org_seq_len, dim=2)
         
@@ -157,8 +159,8 @@ class EffnetV2_Key_Frame(torch.nn.Module):
             x = self.model.classifier(x)
         else:
             #print(features_padded.shape)
-            features_padded = features_padded.mean(dim = 1)
-            #print(features_padded.shape)
+            #features_padded = features_padded.mean(dim = 1)
+            features_padded = features_padded.permute(0, 2, 1)
             x = self.model.classifier(features_padded)
             #print('x shape in else', x.shape)
             #print(x.shape)
@@ -180,8 +182,8 @@ class EffnetV2_L(torch.nn.Module):
         self.dropout = dropout
         self.out_features = out_features
         self.in_channels = in_channels
-        self.model = efficientnet_v2_l(weights = 'EfficientNet_V2_L_Weights.IMAGENET1K_V1')
-        self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+        self.model = effnetv2_l()
+        #self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
         self.model.avgpool = torch.nn.Identity()
         self.model.classifier = torch.nn.Sequential(nn.Dropout(self.dropout), nn.Linear(1280, self.out_features))
         self.sigmoid = torch.nn.Sigmoid()
@@ -297,7 +299,7 @@ class EffnetV2_L_meta(torch.nn.Module):
         return out
     
     
-# model = EffnetV2_Key_Frame(out_features = 1, in_channels = 1, dropout = 0.4, use_key_frame_attention=True)
-# split_sizes = [3, 2, 4, 4]
-# org_batch = [torch.rand(i, 1, 512, 512) for i in split_sizes]
-# print(model(org_batch, split_sizes))
+model = EffnetV2_Key_Frame(out_features = 1, in_channels = 1, dropout = 0.4, use_key_frame_attention=False)
+split_sizes = [3, 2, 4, 4]
+org_batch = [torch.rand(i, 1, 512, 512) for i in split_sizes]
+print(model(org_batch, split_sizes).shape)

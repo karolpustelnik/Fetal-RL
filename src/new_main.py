@@ -121,12 +121,12 @@ def main(rank, world_size, config):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     np.random.seed(seed)
-    random.seed(seed)
+    #random.seed(seed)
     # linear scale the learning rate according to total batch size, may not be optimal
     linear_scaled_lr = float(config.TRAIN.BASE_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
     linear_scaled_warmup_lr = float(config.TRAIN.WARMUP_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
     linear_scaled_min_lr = float(config.TRAIN.MIN_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
-    name = config.MODEL.NAME + f"_bs{config.DATA.BATCH_SIZE}_lr{config.TRAIN.BASE_LR}_augm{config.DATA.AUGM}_drop{config.MODEL.DROP_RATE}_n_frames{config.TRAIN.NUM_FRAMES}"
+    name = config.MODEL.NAME + f"_bs{config.DATA.BATCH_SIZE}_lr{config.TRAIN.BASE_LR}_augm{config.DATA.AUGM}_drop{config.MODEL.DROP_RATE}_n_frames{config.TRAIN.NUM_FRAMES}_key_frame_att{config.MODEL.KEY_FRAME_ATTENTION}"
     output = os.path.join(config.OUTPUT, name, config.TAG)
     config.defrost()
     config.DATA.BATCH_SIZE = config.DATA.BATCH_SIZE * dist.get_world_size()
@@ -244,7 +244,7 @@ def main(rank, world_size, config):
                 if rank == 0:
                     wandb.log({'val_acc': acc1_meter, 'val_f1_score': f1_score_meter, 'val_recall': recall_meter, 'val_precision': precision_meter}, step = epoch)
             elif config.MODEL.TASK_TYPE == 'reg':
-                if epoch%8 == 0:
+                if epoch%15 == 0:
                     mae_meter, mape_meter, rmse_meter, loss_meter_reg = validate(config, data_loader_val, model, logger)
                     if rank == 0:
                         wandb.log({'val_mae': mae_meter, 'val_mape': mape_meter, 'val_rmse': rmse_meter, 'val_loss': loss_meter_reg}, step = epoch)

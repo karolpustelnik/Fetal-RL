@@ -5,16 +5,19 @@ metric:
 parameters:
   augm:
     values:
+      - false
+  key_frame_attention:
+    values:
       - true
       - false
   dropout:
     distribution: uniform
-    max: 0.4
+    max: 0.3
     min: 0.0
   base_lr:
     distribution: uniform
-    max: 5.25e-06
-    min: 5.25e-10
+    max: 5.25e-05
+    min: 5.25e-06
   optimizer:
     values:
       - 'adamw'
