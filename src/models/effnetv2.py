@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint as checkpoint
 from torchvision.models import efficientnet_v2_l
 from .efficient_net_group_norm import effnetv2_m, effnetv2_l, effnetv2_xl
-from torch.utils.checkpoint import checkpoint
+from torch.utils.checkpoint import checkpoint_sequential
 #from .cbam import CBAMBlock
 
 class SpatialAttention(torch.nn.Module):
@@ -136,7 +135,7 @@ class EffnetV2_Key_Frame(torch.nn.Module):
         #print('shape of x', x.shape)
         x = torch.cat(x)
         
-        features = self.model.features(x)
+        features = checkpoint_sequential(self.model.features, segments=len(self.features), input=x)
         features = self.model.conv(features)
         if self.use_attention:
             features = self.spatial_attention(features)
@@ -299,7 +298,7 @@ class EffnetV2_L_meta(torch.nn.Module):
         return out
     
     
-model = EffnetV2_Key_Frame(out_features = 1, in_channels = 1, dropout = 0.4, use_key_frame_attention=False)
-split_sizes = [3, 2, 4, 4]
-org_batch = [torch.rand(i, 1, 512, 512) for i in split_sizes]
-print(model(org_batch, split_sizes).shape)
+# model = EffnetV2_Key_Frame(out_features = 1, in_channels = 1, dropout = 0.4, use_key_frame_attention=False)
+# split_sizes = [3, 2, 4, 4]
+# org_batch = [torch.rand(i, 1, 512, 512) for i in split_sizes]
+# print(model(org_batch, split_sizes).shape)
