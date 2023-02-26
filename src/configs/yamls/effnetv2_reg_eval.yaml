@@ -3,23 +3,30 @@ EVAL_MODE: TRUE
 DATA:
   IMG_SIZE: 512
   DATASET: fetal
-  BATCH_SIZE: 256
-  AUGM: False
-  TRAIN_SET: '/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/all/biometry_val_scaled_size_all_filtered_for_eval.csv'
-  VAL_SET: '/data/kpusteln/Fetal-RL/data_preparation/test_data/results_two_models_cls_filtered.csv'
+  BATCH_SIZE: 4 #per 1 gpu
+  AUGM: True
+  IMG_SCALING: False
+  VIDEOS_VAL: /data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/all/videos_val.csv
+  VIDEOS_TRAIN: /data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/all/videos_train.csv
 MODEL:
-  TYPE: effnetv2
-  NAME: effnetv2_reg
+  TYPE: effnetv2_key_frame
+  NAME: effnetv2_bayes_search
   NUM_CLASSES: 1
   TASK_TYPE: reg
   AFFIX: .csv
+  LOSS: 'L1'
+  DROP_RATE : 0.4
+  SIGMOID: False
+  ATTENTION: True
+  BODY_PART: 'all'
+  KEY_FRAME_ATTENTION: True
+
 TRAIN:
-  EPOCHS: 90
-  WARMUP_EPOCHS: 5
+  NUM_FRAMES: 3
+  EPOCHS: 1200
+  WARMUP_EPOCHS: 66
   WEIGHT_DECAY: 0.05
-  BASE_LR: 1.25e-3 # 4096 batch-size
-  WARMUP_LR: 1.25e-7
-  MIN_LR: 1.25e-6
+  BASE_LR: 1.25e-5
+  WARMUP_LR: 1.25e-8
+  MIN_LR: 1.25e-8
   AUTO_RESUME: FALSE
-  OPTIMIZER:
-      NAME: adamW

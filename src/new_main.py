@@ -1,4 +1,6 @@
 import wandb
+import warnings
+warnings.filterwarnings("ignore")
 import hashlib
 import os
 import time
@@ -33,7 +35,7 @@ from optimizer import build_optimizer
 from logger import create_logger
 from new_utils import load_checkpoint, load_pretrained, save_checkpoint, NativeScalerWithGradNormCount, auto_resume_helper, \
     reduce_tensor
-    
+
 
 def setup(rank, world_size):
     """
@@ -101,6 +103,12 @@ def parse_option():
     parser.add_argument("--loss", type = str, help='loss function')
     parser.add_argument('--key_frame_attention', help='whether to use key frame attention')
     parser.add_argument('--num_frames', type = int, help='num frames to use during training')
+    parser.add_argument('--use_alpha', help = 'whether to use alpha in skip connection')
+    parser.add_argument('--use_skip_connection', help = 'whether to use_skip_connection in attention modules')
+    parser.add_argument('--use_gelu', help = 'whether to use gelu in attention modules')
+    parser.add_argument('--use_layer_norm', help = 'whether to use layer norm in attention modules')
+    parser.add_argument('--use_head', help = 'whether to use regression head in model')
+    #parser.add_argument('--num_workers', type = int, help='number of workers to use in dataloader')
     
     args, unparsed = parser.parse_known_args()
 
@@ -118,15 +126,15 @@ def main(rank, world_size, config):
     if rank == 0:
         wandb.init() 
     seed = config.SEED + dist.get_rank()
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    np.random.seed(seed)
+    # torch.manual_seed(seed)
+    # torch.cuda.manual_seed(seed)
+    #np.random.seed(seed)
     #random.seed(seed)
     # linear scale the learning rate according to total batch size, may not be optimal
     linear_scaled_lr = float(config.TRAIN.BASE_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
     linear_scaled_warmup_lr = float(config.TRAIN.WARMUP_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
     linear_scaled_min_lr = float(config.TRAIN.MIN_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
-    name = config.MODEL.NAME + f"_bs{config.DATA.BATCH_SIZE}_lr{config.TRAIN.BASE_LR}_augm{config.DATA.AUGM}_drop{config.MODEL.DROP_RATE}_n_frames{config.TRAIN.NUM_FRAMES}_key_frame_att{config.MODEL.KEY_FRAME_ATTENTION}"
+    name = config.MODEL.NAME + f"_bs{config.DATA.BATCH_SIZE}_lr{config.TRAIN.BASE_LR}_drop{config.MODEL.DROP_RATE}_n_frames{config.TRAIN.NUM_FRAMES}_key_frame_att{config.MODEL.KEY_FRAME_ATTENTION}_alpha{config.MODEL.USE_ALPHA}_use_skip_connection{config.MODEL.USE_SKIP_CONNECTION}_use_gelu{config.MODEL.USE_GELU}_use_layer_norm{config.MODEL.USE_LAYER_NORM}_use_head{config.MODEL.USE_HEAD}"
     output = os.path.join(config.OUTPUT, name, config.TAG)
     config.defrost()
     config.DATA.BATCH_SIZE = config.DATA.BATCH_SIZE * dist.get_world_size()
@@ -172,7 +180,10 @@ def main(rank, world_size, config):
     if config.TRAIN.ACCUMULATION_STEPS > 1:
         lr_scheduler = build_scheduler(config, optimizer, len(data_loader_train) // config.TRAIN.ACCUMULATION_STEPS)
     else:
-        lr_scheduler = build_scheduler(config, optimizer, 36256/(config.DATA.BATCH_SIZE * config.TRAIN.NUM_FRAMES))
+        if config.MODEL.TASK_TYPE == 'reg':
+            lr_scheduler = build_scheduler(config, optimizer, 36256/(config.DATA.BATCH_SIZE * config.TRAIN.NUM_FRAMES))
+        else:
+            lr_scheduler = build_scheduler(config, optimizer, len(data_loader_train)/config.DATA.BATCH_SIZE)
         
     #normed_weight = torch.load('/home/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/precision_weights.pt').cuda()
     criterion_cls = torch.nn.CrossEntropyLoss() ## changed
@@ -287,11 +298,17 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
                 if config.MODEL.TYPE == 'effnetv2_meta':
                     meta = torch.stack((days_normalized, frame_loc), dim = 1).cuda(non_blocking=True)
                     outputs = model((images, meta)) 
-                else:
-                    if config.MODEL.TYPE == 'effnetv2_key_frame' or config.MODEL.TYPE == 'effnetv2':
+                elif config.MODEL.TYPE == 'effnetv2_key_frame':
                         #images = images.squeeze(0)
                         #('shape of images', images.shape)
                         outputs = model(images, org_seq_lens)
+                elif config.MODEL.TYPE == 'swin-video':
+                    org_batch_unsqueezed = [i.unsqueeze(0) for i in images]
+                    org_batch_unsqueezed = torch.cat(org_batch_unsqueezed, dim = 0)
+                    org_batch_unsqueezed = org_batch_unsqueezed.permute(0, 2, 1, 3, 4)
+                    outputs = model(org_batch_unsqueezed)
+                elif config.MODEL.TYPE == 'effnetv2':
+                    outputs = model(images)
         elif config.PARALLEL_TYPE == 'model_parallel':
             #labels = labels.to('cuda:1')
             with torch.autocast(device_type='cuda', dtype=torch.float16):
@@ -378,10 +395,16 @@ def validate(config, data_loader, model, logger):
                 if config.MODEL.TYPE == 'effnetv2_meta':
                     meta = torch.stack((days_normalized, frame_loc), dim = 1).cuda(non_blocking=True)
                     outputs = model((images, meta)) 
-                else:
-                    if config.MODEL.TYPE == 'effnetv2_key_frame' or config.MODEL.TYPE == 'effnetv2':
-                        #images = images.squeeze(0)
-                        outputs = model(images, org_seq_lens)
+                elif config.MODEL.TYPE == 'effnetv2_key_frame':
+                    #images = images.squeeze(0)
+                    outputs = model(images, org_seq_lens)
+                elif config.MODEL.TYPE == 'swin-video':
+                    org_batch_unsqueezed = [i.unsqueeze(0) for i in images]
+                    org_batch_unsqueezed = torch.cat(org_batch_unsqueezed, dim = 0)
+                    org_batch_unsqueezed = org_batch_unsqueezed.permute(0, 2, 1, 3, 4)
+                    outputs = model(org_batch_unsqueezed)
+                elif config.MODEL.TYPE == 'effnetv2':
+                    outputs = model(images)
             
         elif config.PARALLEL_TYPE == 'model_parallel':
             #labels = labels.to('cuda:1')
@@ -394,12 +417,12 @@ def validate(config, data_loader, model, logger):
             Class = Class.squeeze(0)
             with torch.autocast(device_type='cuda', dtype=torch.float16):
                 loss_cls = criterion_cls(outputs, Class)
-            acc1 = accuracy(outputs, Class, num_classes=config.MODEL.NUM_CLASSES, average = 'micro', 
+            acc1 = accuracy(outputs, Class, num_classes=config.MODEL.NUM_CLASSES, average = 'macro', 
                             mdmc_average = 'global' if config.PARALLEL_TYPE == 'model_parallel' else None)
-            precision, recall = precision_recall(outputs, Class, num_classes=config.MODEL.NUM_CLASSES, average = 'micro',
+            precision, recall = precision_recall(outputs, Class, num_classes=config.MODEL.NUM_CLASSES, average = 'macro',
                                                  mdmc_average = 'global' if config.PARALLEL_TYPE == 'model_parallel' else None)
             
-            f1 = f1_score(outputs, Class, num_classes=config.MODEL.NUM_CLASSES, average = 'micro', 
+            f1 = f1_score(outputs, Class, num_classes=config.MODEL.NUM_CLASSES, average = 'macro', 
                           mdmc_average = 'global' if config.PARALLEL_TYPE == 'model_parallel' else None)
             
             if config.PARALLEL_TYPE == 'ddp':

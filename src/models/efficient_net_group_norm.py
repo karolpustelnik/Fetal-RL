@@ -96,7 +96,7 @@ class MBConv(nn.Module):
                 nn.Conv2d(hidden_dim, hidden_dim, 3, stride, 1, groups=hidden_dim, bias=False),
                 nn.GroupNorm(num_channels=hidden_dim, num_groups=num_groups),
                 SiLU(),
-                SELayer(inp, hidden_dim),
+                SELayer(inp, hidden_dim, num_groups = num_groups),
                 # pw-linear
                 nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
                 nn.GroupNorm(num_channels=oup, num_groups=num_groups),
@@ -121,10 +121,10 @@ class MBConv(nn.Module):
 
 
 class EffNetV2(nn.Module):
-    def __init__(self, cfgs, num_classes=1000, width_mult=1.):
+    def __init__(self, cfgs, num_classes=1000, width_mult=1., num_groups = 4):
         super(EffNetV2, self).__init__()
         self.cfgs = cfgs
-
+        self.num_groups = num_groups
         # building first layer
         input_channel = _make_divisible(32 * width_mult, 8)
         layers = [conv_3x3_bn(1, input_channel, 2)]
@@ -133,7 +133,7 @@ class EffNetV2(nn.Module):
         for t, c, n, s, use_se in self.cfgs:
             output_channel = _make_divisible(c * width_mult, 8)
             for i in range(n):
-                layers.append(block(input_channel, output_channel, s if i == 0 else 1, t, use_se))
+                layers.append(block(input_channel, output_channel, s if i == 0 else 1, t, use_se, num_groups = self.num_groups))
                 input_channel = output_channel
         self.features = nn.Sequential(*layers)
         self.conv = conv_1x1_bn(input_channel, 1280)
@@ -146,7 +146,7 @@ class EffNetV2(nn.Module):
         self._initialize_weights()
 
     def forward(self, x):
-        x = checkpoint_sequential(self.features, segments=len(self.features), input=x)
+        x = self.features(x)
         x = self.conv(x)
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
@@ -233,3 +233,5 @@ def effnetv2_xl(**kwargs):
         [6, 640,  8, 1, 1],
     ]
     return EffNetV2(cfgs, **kwargs)
+
+

@@ -1,24 +1,23 @@
-# --------------------------------------------------------
-# Swin Transformer
-# Copyright (c) 2021 Microsoft
-# Licensed under The MIT License [see LICENSE for details]
-# Written by Ze Liu
-# --------------------------------------------------------
-
-#from .swin_transformer import SwinTransformer, ResNet101, EffNet
+    
+import warnings
+warnings.filterwarnings("ignore")
 from .effnet_longformer import EFL
 from .UniNet import UniNetB6
 from .vit import ViT
 from .effnetv2 import EffnetV2_L_meta, EffnetV2_Key_Frame, EffnetV2_L
 from .efficient_ete import EffnetEtE
 from .metaformer_baselines import CA_former
+from .D_models.swin_video import SwinTransformer3D
+    
 def build_model(config):
     model_type = config.MODEL.TYPE
+    print('Model type: ', model_type)
     
 
     if model_type == 'effnetv2' or model_type == 'effnetv2_cls_pos_encoding':
         model = EffnetV2_L(out_features = config.MODEL.NUM_CLASSES, dropout= config.MODEL.DROP_RATE, use_sigmoid = config.MODEL.SIGMOID, use_attention = config.MODEL.ATTENTION)
-        
+    elif model_type == 'swin-video':
+        model = SwinTransformer3D()
     elif model_type == 'efl':
         model = EFL(out_features = config.MODEL.NUM_CLASSES)
     elif model_type == 'uninet':
@@ -38,7 +37,10 @@ def build_model(config):
     elif model_type == 'effnetv2_key_frame':
         model = EffnetV2_Key_Frame(out_features = config.MODEL.NUM_CLASSES, dropout= config.MODEL.DROP_RATE, 
                                    use_sigmoid = config.MODEL.SIGMOID, use_attention = config.MODEL.ATTENTION,
-                                   use_key_frame_attention=config.MODEL.KEY_FRAME_ATTENTION)
+                                   use_key_frame_attention=config.MODEL.KEY_FRAME_ATTENTION, n_frames=config.TRAIN.NUM_FRAMES,
+                                   use_alpha = config.MODEL.USE_ALPHA, use_layer_norm=config.MODEL.USE_LAYER_NORM,
+                                   use_skip_connection=config.MODEL.USE_SKIP_CONNECTION, use_gelu = config.MODEL.USE_GELU,
+                                   use_head = config.MODEL.USE_HEAD)
         
         
     return model

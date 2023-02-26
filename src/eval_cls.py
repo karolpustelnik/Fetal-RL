@@ -83,6 +83,12 @@ def parse_option():
     parser.add_argument("--sigmoid", help='whether to use sigmoid')
     parser.add_argument("--attention", help='whether to use spatial attention')
     parser.add_argument("--loss", type = str, help='loss function')
+    parser.add_argument('--key_frame_attention', help='whether to use key frame attention')
+    parser.add_argument('--num_frames', type = int, help='num frames to use during training')
+    parser.add_argument('--use_alpha', help = 'whether to use alpha in skip connection')
+    parser.add_argument('--use_skip_connection', help = 'whether to use_skip_connection in attention modules')
+    parser.add_argument('--use_gelu', help = 'whether to use gelu in attention modules')
+    parser.add_argument('--use_layer_norm', help = 'whether to use layer norm in attention modules')
     args, unparsed = parser.parse_known_args()
 
     config = get_config(args)
@@ -292,6 +298,7 @@ def validate(config, data_loader, model):
         if config.PARALLEL_TYPE == 'ddp':
             #labels = labels.cuda(non_blocking=True)
             #print(labels.shape)
+        if config.MODEL.TYPE == 'effnetv2_key_frame':
             outputs = model(images) 
         if config.MODEL.TASK_TYPE == 'cls':
             predicted_classes = torch.nn.functional.softmax(outputs, dim=1).argmax(dim = 1).cpu()
@@ -300,7 +307,8 @@ def validate(config, data_loader, model):
             probs = torch.cat((probs, probabilities), 0)
             frames.extend(list(frame_name))
             videos.extend(list(video))
-            ps = ps.cpu().numpy()
+            print(ps)
+            print(ps.shape)
             pss.extend(list(ps))
             Class = Class.cpu().numpy()
             Classes.extend(list(Class))
@@ -332,7 +340,7 @@ def validate(config, data_loader, model):
         print('ps len' + str(len(pss)))
         data_frame = pd.DataFrame({'index': frames, 'video': videos, 'predict': results, 'gt': Classes, 'probs': probs, 'ps': pss})
         print('Saving...')
-        data_frame.to_csv('/data/kpusteln/Fetal-RL/data_preparation/test_data/results_cls_new.csv', index = False)
+        data_frame.to_csv('/data/kpusteln/Fetal-RL/data_preparation/test_data/results_cls_spatial_attention.csv', index = False)
         print('Finished!')
     elif config.MODEL.TASK_TYPE == 'reg':
         data_frame = pd.DataFrame({'index': frames, 'video': videos, 'measures': measures})

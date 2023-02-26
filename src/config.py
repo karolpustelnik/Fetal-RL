@@ -1,10 +1,6 @@
-# --------------------------------------------------------
-# Swin Transformer
-# Copyright (c) 2021 Microsoft
-# Licensed under The MIT License [see LICENSE for details]
-# Written by Ze Liu
-# --------------------------------------------------------'
-
+    
+import warnings
+warnings.filterwarnings("ignore")
 import os
 import yaml
 from yacs.config import CfgNode as CN
@@ -66,8 +62,15 @@ _C.MODEL.DROP_RATE = 0.0
 
 _C.MODEL.KEY_FRAME_ATTENTION = True
 
+_C.MODEL.USE_GELU = True
+_C.MODEL.USE_LAYER_NORM = True
+_C.MODEL.USE_SKIP_CONNECTION = True
+_C.MODEL.USE_ALPHA = True
+
+
 _C.MODEL.SIGMOID = False
 _C.MODEL.ATTENTION = False
+_C.MODEL.USE_HEAD = False
 # Task type
 _C.MODEL.TASK_TYPE = 'reg'
 _C.MODEL.AFFIX = '.csv'
@@ -225,6 +228,17 @@ def update_config(config, args):
         config.MODEL.KEY_FRAME_ATTENTION = True if args.key_frame_attention == 'True' else False
     if args.num_frames:
         config.TRAIN.NUM_FRAMES = args.num_frames
+    if args.use_gelu:
+        config.MODEL.USE_GELU = True if args.use_gelu == 'True' else False
+    if args.use_layer_norm:
+        config.MODEL.USE_LAYER_NORM = True if args.use_layer_norm == 'True' else False
+    if args.use_skip_connection:
+        config.MODEL.USE_SKIP_CONNECTION = True if args.use_skip_connection == 'True' else False
+    if args.use_alpha:
+        config.MODEL.USE_ALPHA = True if args.use_alpha == 'True' else False
+    if args.use_head:
+        config.MODEL.USE_HEAD = True if args.use_head == 'True' else False
+    
 
     
 

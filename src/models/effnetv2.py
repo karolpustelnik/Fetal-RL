@@ -1,49 +1,80 @@
+    
+import warnings
+warnings.filterwarnings("ignore")
 import torch
 import torch.nn as nn
+import torch.utils.checkpoint as checkpoint
 from torchvision.models import efficientnet_v2_l
 from .efficient_net_group_norm import effnetv2_m, effnetv2_l, effnetv2_xl
-from torch.utils.checkpoint import checkpoint_sequential
+    
 #from .cbam import CBAMBlock
 
 class SpatialAttention(torch.nn.Module):
-    def __init__(self, feature_map_size = 16, n_channels = 1280):
+    def __init__(self, feature_map_size = 16, n_channels = 1280, use_layer_norm = False, use_alpha = True, use_skip_connection = True, use_gelu = False):
         super().__init__()
     
+        self.use_alpha = use_alpha
+        self.use_skip_connection = use_skip_connection
+        self.use_gelu = use_gelu
+        self.use_layer_norm = use_layer_norm
         self.n_channels = n_channels
         self.feature_map_size = feature_map_size
-        self.keys = torch.nn.Conv2d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
-        self.queries = torch.nn.Conv2d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
-        self.values = torch.nn.Conv2d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
-        self.refine = torch.nn.Conv2d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0)
+        self.keys = torch.nn.Conv2d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0, bias=False)
+        self.queries = torch.nn.Conv2d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0, bias=False)
+        self.values = torch.nn.Conv2d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0, bias=False)
+        self.refine = torch.nn.Conv2d(self.n_channels, self.n_channels, kernel_size=1, stride=1, padding=0, bias=False)
         self.softmax = torch.nn.Softmax2d()
-        self.alpha = torch.nn.Parameter(torch.zeros(1))
-        
+        self.gelu = torch.nn.GELU()
+        if self.use_alpha:
+            self.alpha = torch.nn.Parameter(torch.zeros(1))
+        if self.use_layer_norm:
+            self.layer_norm = torch.nn.LayerNorm([self.n_channels, self.feature_map_size, self.feature_map_size])
     def forward(self, x):
         
         attended_features = torch.matmul(self.softmax(torch.matmul(self.keys(x).view(x.size(0), self.n_channels, -1).permute(0, 2, 1), 
                                                                    self.queries(x).view(x.size(0), self.n_channels, -1))/self.n_channels**0.5), 
                                          self.values(x).view(x.size(0), self.n_channels, -1).permute(0, 2, 1)) # (batch_size, feature_map_size * feature_map_size, n_channels)
         attended_features = attended_features.permute(0, 2, 1).view(x.size(0), self.n_channels, self.feature_map_size, self.feature_map_size) # (batch_size, n_channels, feature_map_size, feature_map_size)
+        if self.use_gelu:
+            #print('spatial using gelu')
+            attended_features = self.gelu(attended_features)
         attended_features = self.refine(attended_features)
-        attended_features = self.alpha * attended_features + x
-        
+        if self.use_alpha:
+            #print('spatial using alpha')
+            attended_features = self.alpha*attended_features + x
+        else:
+            #print('spatial not using alpha')
+            attended_features = attended_features + x
+        if self.use_layer_norm:
+            #print('spatial using layer norm')
+            attended_features = self.layer_norm(attended_features)
+        if self.use_gelu:
+            #print('spatial using gelu')
+            attended_features = self.gelu(attended_features)
         return attended_features
     
     
     
 class KeyFrameAttention(torch.nn.Module):
-    def __init__(self, n_frames = 4, n_channels = 1280):
+    def __init__(self, n_frames = 4, n_channels = 1280, use_alpha = False, use_layer_norm = False, use_skip_connection = False, use_gelu = False):
         super().__init__()
     
-    
+        self.use_alpha = use_alpha
+        self.use_skip_connection = use_skip_connection
+        self.use_gelu = use_gelu
+        self.use_layer_norm = use_layer_norm
         self.n_frames = n_frames
         self.n_channels = n_channels
-        self.keys = torch.nn.Linear(self.n_channels, self.n_channels)
-        self.queries = torch.nn.Linear(self.n_channels, self.n_channels)
-        self.values = torch.nn.Linear(self.n_channels, self.n_channels)
-        self.refine = torch.nn.Linear(self.n_channels, self.n_channels)
+        self.keys = torch.nn.Linear(self.n_channels, self.n_channels, bias=False)
+        self.queries = torch.nn.Linear(self.n_channels, self.n_channels, bias=False)
+        self.values = torch.nn.Linear(self.n_channels, self.n_channels, bias=False)
+        self.refine = torch.nn.Linear(self.n_channels, self.n_channels, bias=False)
         self.softmax = torch.nn.Softmax(dim=-1)
-        #self.alpha = torch.nn.Parameter(torch.zeros(1))
+        if self.use_layer_norm:
+            self.layer_norm = torch.nn.LayerNorm([self.n_frames, self.n_channels])
+        self.gelu = torch.nn.GELU()
+        if self.use_alpha and self.use_skip_connection:
+            self.alpha = torch.nn.Parameter(torch.zeros(1))
         
     def forward(self, x, Mask = None):
         # x shape: 
@@ -64,7 +95,24 @@ class KeyFrameAttention(torch.nn.Module):
         attention_map = torch.matmul(values.permute(0, 2, 1), softmax) # (batch_size, n_channels, n_frames)
         #print('attention_map', attention_map.shape)
         #print('attention_map', attention_map)
+        if self.use_gelu:
+            #print('kfa using gelu')
+            attention_map = self.gelu(attention_map)
         attended_features = self.refine(attention_map.permute(0, 2, 1)) # (batch_size, n_frames, n_channels)
+        if self.use_skip_connection:
+            #print('kfa using skip connection')
+            if self.use_alpha:
+               # print('kfa using alpha')
+                attended_features = self.alpha*attended_features + x
+            else:
+               # print('kfa not using alpha')
+                attended_features = attended_features + x
+        if self.use_layer_norm:
+           # print('kfa using layer norm')
+            attended_features = self.layer_norm(attended_features)
+        if self.use_gelu:
+           # print('kfa using gelu')
+            attended_features = self.gelu(attended_features)
         #print('attended_features', attended_features)
         #attended_features = attended_features + x
         #print('attended_features', attended_features)
@@ -76,31 +124,49 @@ class KeyFrameAttention(torch.nn.Module):
         return attended_features
 
 
-    
+
 
 class EffnetV2_Key_Frame(torch.nn.Module):
     def __init__(self, out_features = 7, in_channels = 1, dropout = 0.4, use_sigmoid = False, 
                  use_attention = True, use_key_frame_attention = False,
-                 max_len = 4):
+                 n_frames = 4, use_alpha = True, use_layer_norm = False, use_skip_connection = False, use_gelu = False, use_head = False):
         super().__init__()
         
-        self.max_len = max_len
+        self.use_head = use_head
+        self.use_alpha = use_alpha
+        self.use_layer_norm = use_layer_norm
+        self.use_skip_connection = use_skip_connection
+        self.use_gelu = use_gelu
+        self.n_frames = n_frames
         self.use_key_frame_attention = use_key_frame_attention
         self.use_sigmoid = use_sigmoid 
         self.use_attention = use_attention
         self.dropout = dropout
         self.out_features = out_features
         self.in_channels = in_channels
-        self.model = effnetv2_l()
-        #self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+        self.model = efficientnet_v2_l(weights ='DEFAULT')
+        self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
         self.model.avgpool = torch.nn.Identity()
         self.model.classifier = torch.nn.Sequential(nn.Dropout(self.dropout), nn.Linear(1280, self.out_features))
         self.sigmoid = torch.nn.Sigmoid()
+        if self.use_head:
+            self.head = torch.nn.Linear(self.n_frames, self.out_features)
+        
         if self.use_attention:
-            self.spatial_attention = SpatialAttention(feature_map_size = 16, n_channels=1280)
+           # print('Using Attention')
+            self.spatial_attention = SpatialAttention(feature_map_size = 16, n_channels=1280,
+                                                      use_alpha = self.use_alpha,
+                                                      use_layer_norm = self.use_layer_norm,
+                                                      use_skip_connection = self.use_skip_connection,
+                                                      use_gelu = self.use_gelu)
         self.avgpool = torch.nn.AdaptiveAvgPool2d((1, 1))
         if self.use_key_frame_attention:
-            self.key_frame_attention = KeyFrameAttention(n_frames = 4, n_channels = 1280)
+          #  print('Using Key Frame Attention')
+            self.key_frame_attention = KeyFrameAttention(n_frames = self.n_frames, n_channels = 1280,
+                                                         use_alpha = self.use_alpha,
+                                                    use_layer_norm = self.use_layer_norm,
+                                                      use_skip_connection = self.use_skip_connection,
+                                                      use_gelu = self.use_gelu)
         
     def features_padding(self, features, max_length, split_sizes):
         padded_output = []
@@ -130,13 +196,19 @@ class EffnetV2_Key_Frame(torch.nn.Module):
         
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
         
+    
+    def custom(self, module):
+        def custom_forward(*inputs):
+            inputs = module(inputs[0])
+            return inputs
+        return custom_forward
+    
     def forward(self, x, org_seq_len):
 
         #print('shape of x', x.shape)
         x = torch.cat(x)
-        
-        features = checkpoint_sequential(self.model.features, segments=len(self.features), input=x)
-        features = self.model.conv(features)
+        features = self.model.features(x)
+        #features = checkpoint_sequential(self.model.features, segments=len(self.model.features), input=x)
         if self.use_attention:
             features = self.spatial_attention(features)
         
@@ -145,7 +217,7 @@ class EffnetV2_Key_Frame(torch.nn.Module):
         #print('features shape', features.shape)
         tensor_list = torch.split(features, split_size_or_sections = org_seq_len, dim=2)
         
-        features_padded = self.features_padding(tensor_list, self.max_len, org_seq_len)
+        features_padded = self.features_padding(tensor_list, self.n_frames, org_seq_len)
         #print('features_padded shape', features_padded.shape)
         #print('features_padded shape', features_padded.shape)
         features_padded = features_padded.squeeze(1)
@@ -154,9 +226,11 @@ class EffnetV2_Key_Frame(torch.nn.Module):
         #print('mask shape', mask.shape)
         
         if self.use_key_frame_attention:
+          #  print('Using Key Frame Attention')
             x = self.key_frame_attention(features_padded.permute(0, 2, 1), Mask = mask)
             x = self.model.classifier(x)
         else:
+          #  print('Not Using Key Frame Attention')
             #print(features_padded.shape)
             #features_padded = features_padded.mean(dim = 1)
             features_padded = features_padded.permute(0, 2, 1)
@@ -164,10 +238,15 @@ class EffnetV2_Key_Frame(torch.nn.Module):
             #print('x shape in else', x.shape)
             #print(x.shape)
         if self.use_sigmoid:
+         #   print('Using Sigmoid')
             x = self.sigmoid(x)
-        x = x.mean(dim = 1)
-    #print('x', x.shape)
+        if self.use_head:
+            x = x.permute(0, 2, 1).squeeze(1)
+            x = self.head(x)
+        else:
+            x = x.mean(dim = 1)
         return x
+    
 
 
         
@@ -181,8 +260,8 @@ class EffnetV2_L(torch.nn.Module):
         self.dropout = dropout
         self.out_features = out_features
         self.in_channels = in_channels
-        self.model = effnetv2_l()
-        #self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+        self.model = efficientnet_v2_l(weights = 'EfficientNet_V2_L_Weights.IMAGENET1K_V1')
+        self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
         self.model.avgpool = torch.nn.Identity()
         self.model.classifier = torch.nn.Sequential(nn.Dropout(self.dropout), nn.Linear(1280, self.out_features))
         self.sigmoid = torch.nn.Sigmoid()
@@ -198,12 +277,14 @@ class EffnetV2_L(torch.nn.Module):
     def forward(self, x):
         if self.use_attention:
             x = self.model.features(x)
+            #x = self.model.conv(x)
             x = self.spatial_attention(x)
             x = self.avgpool(x)
             x = torch.flatten(x, 1)
             x = self.model.classifier(x)
         else:
             x = self.model.features(x)
+            #x = self.model.conv(x)
             x = self.avgpool(x)
             x = torch.flatten(x, 1)
             x = self.model.classifier(x)
@@ -297,8 +378,10 @@ class EffnetV2_L_meta(torch.nn.Module):
         out = self.classifier(features)
         return out
     
-    
-# model = EffnetV2_Key_Frame(out_features = 1, in_channels = 1, dropout = 0.4, use_key_frame_attention=False)
-# split_sizes = [3, 2, 4, 4]
+# use_layer_norm, use_skip_connection, use_gelu    
+# model = EffnetV2_Key_Frame(out_features = 1, in_channels = 1, dropout = 0.4, use_key_frame_attention=True, use_layer_norm = True, use_skip_connection = False, use_gelu = True)
+# split_sizes = [4, 2, 3, 4]
 # org_batch = [torch.rand(i, 1, 512, 512) for i in split_sizes]
+
 # print(model(org_batch, split_sizes).shape)
+
