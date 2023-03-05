@@ -285,8 +285,8 @@ class EffnetV2_L(torch.nn.Module):
         self.dropout = dropout
         self.out_features = out_features
         self.in_channels = in_channels
-        self.model = efficientnet_v2_s(weights = 'EfficientNet_V2_S_Weights.IMAGENET1K_V1')
-        self.model.features[0] = torch.nn.Conv2d(self.in_channels, 24, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+        self.model = efficientnet_v2_l(weights = 'EfficientNet_V2_L_Weights.IMAGENET1K_V1')
+        self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
         self.model.avgpool = torch.nn.Identity()
         self.model.classifier = torch.nn.Sequential(nn.Dropout(self.dropout), nn.Linear(1280, self.out_features))
         self.sigmoid = torch.nn.Sigmoid()

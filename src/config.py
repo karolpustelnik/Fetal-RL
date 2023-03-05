@@ -137,7 +137,7 @@ _C.TAG = 'default'
 # Frequency to save checkpoint
 _C.SAVE_FREQ = 15
 # Frequency to logging info
-_C.PRINT_FREQ = 100
+_C.PRINT_FREQ = 10
 # Fixed random seed
 _C.SEED = 0
 # Perform evaluation only, overwritten by command line argument
@@ -244,6 +244,8 @@ def update_config(config, args):
         config.MODEL.BACKBONE = args.backbone
     if args.img_size:
         config.DATA.IMG_SIZE = args.img_size
+    if args.weight_decay:
+        config.TRAIN.WEIGHT_DECAY = args.weight_decay
     
 
     

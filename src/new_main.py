@@ -112,6 +112,7 @@ def parse_option():
     parser.add_argument('--use_head', help = 'whether to use regression head in model')
     parser.add_argument('--backbone', type = str,  help = 'what bacbkone to use')
     parser.add_argument('--img_size', type = int, help = 'size of input img')
+    parser.add_argument("--weight_decay", type = float, help='r2 regularization')
     
     #parser.add_argument('--num_workers', type = int, help='number of workers to use in dataloader')
     
@@ -192,13 +193,13 @@ def main(rank, world_size, config):
         
     #normed_weight = torch.load('/home/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/precision_weights.pt').cuda()
     if config.MODEL.BODY_PART == 'abdomen':
-        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/abdomen_class_weight.pt').cuda()
+        weights = torch.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/abdomen_class_weight.pt').cuda()
     elif config.MODEL.BODY_PART == 'head':
-        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/head_class_weight.pt').cuda()
+        weights = torch.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/head_class_weight.pt').cuda()
     elif config.MODEL.BODY_PART == 'femur':
-        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/femur_class_weight.pt').cuda()
-    else:
-        weights = None
+        weights = torch.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/femur_class_weight.pt').cuda()
+    elif config.MODEL.BODY_PART == 'all':
+        weights = torch.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data/weights_all.pt').cuda()
     criterion_cls = torch.nn.CrossEntropyLoss(weight = weights)## changed
     criterion_reg = torch.nn.MSELoss() if config.MODEL.LOSS == 'L2' else torch.nn.L1Loss()
 
@@ -349,7 +350,7 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
             loss_meter_reg.update(loss.item())
 
             
-
+        #if idx % config.PRINT_FREQ == 0:
         if idx == num_steps - 1:
             lr = optimizer.param_groups[0]['lr']
             if config.MODEL.TASK_TYPE == 'cls':
@@ -376,13 +377,13 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
 def validate(config, data_loader, model, logger):
     #normed_weight = torch.load('/home/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/normedWeights.pt').cuda()
     if config.MODEL.BODY_PART == 'abdomen':
-        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/abdomen_class_weight.pt').cuda()
+        weights = torch.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/abdomen_class_weight.pt').cuda()
     elif config.MODEL.BODY_PART == 'head':
-        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/head_class_weight.pt').cuda()
+        weights = torch.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/head_class_weight.pt').cuda()
     elif config.MODEL.BODY_PART == 'femur':
-        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/femur_class_weight.pt').cuda()
-    else:
-        weights = None
+        weights = torch.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/femur_class_weight.pt').cuda()
+    elif config.MODEL.BODY_PART == 'all':
+        weights = torch.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data/weights_all.pt').cuda()
     criterion_cls = torch.nn.CrossEntropyLoss(weight = weights) ## changed
     criterion_reg = torch.nn.MSELoss() if config.MODEL.LOSS == 'L2' else torch.nn.L1Loss()
     mae = MeanAbsoluteError().cuda()
@@ -403,11 +404,13 @@ def validate(config, data_loader, model, logger):
     mape_meter = AverageMeter()
     rmse_meter = AverageMeter()
     if config.MODEL.BODY_PART == 'abdomen':
-        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/abdomen_class_weight.pt').cuda()
+        weights = torch.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/abdomen_class_weight.pt').cuda()
     elif config.MODEL.BODY_PART == 'head':
-        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/head_class_weight.pt').cuda()
+        weights = torch.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/head_class_weight.pt').cuda()
     elif config.MODEL.BODY_PART == 'femur':
-        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/femur_class_weight.pt').cuda()
+        weights = torch.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/femur_class_weight.pt').cuda()
+    elif config.MODEL.BODY_PART == 'all':
+        weights = torch.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data/weights_all.pt').cuda()
     for idx, (images, Class, measure, ps, frames_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized, org_seq_lens) in enumerate(data_loader):
         #images = images.to(torch.float32)
         if config.PARALLEL_TYPE == 'ddp':
@@ -496,7 +499,7 @@ def validate(config, data_loader, model, logger):
             
             
 
-
+        #if idx % config.PRINT_FREQ == 0:
         if idx == len(data_loader) - 1:
             if config.MODEL.TASK_TYPE == 'cls':
                 
@@ -516,12 +519,15 @@ def validate(config, data_loader, model, logger):
                     f'mape {mape_meter.val:.3f} ({mape_meter.avg:.3f})\t' 
                     f'rmse {rmse_meter.val:.3f} ({rmse_meter.avg:.3f})\t')
     
-    acc = accuracy(predicts, Classes.int())
-    precision, recall = precision_recall(predicts, Classes.int(), average='macro')
-    precision_per_class, recall_per_class = precision_recall(predicts, Classes.int(), average = None)
-    f1 = f1_score(predicts, Classes.int(), average='macro')
-    print('Recall and precision per class:', recall_per_class, precision_per_class)
     if config.MODEL.TASK_TYPE == 'cls':
+        predicts = reduce_tensor(predicts)
+        Classes = reduce_tensor(Classes)
+        acc = accuracy(predicts, Classes.int())
+        precision, recall = precision_recall(predicts, Classes.int(), average = 'macro', 
+                                            multiclass = True ,num_classes=config.MODEL.NUM_CLASSES)
+        precision_per_class, recall_per_class = precision_recall(predicts, Classes.int(), average = None, num_classes=config.MODEL.NUM_CLASSES, multiclass = True)
+        f1 = f1_score(predicts, Classes.int(), average='macro', multiclass= True, num_classes=config.MODEL.NUM_CLASSES)
+        print('Recall and precision per class:', recall_per_class, precision_per_class)
         print('Finished validation! Results:')
         logger.info(f' * Acc@1 {acc:.3f}')
         logger.info(f' * f@1_score {f1:.3f}')
