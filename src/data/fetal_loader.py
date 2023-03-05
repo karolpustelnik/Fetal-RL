@@ -56,9 +56,9 @@ class Fetal_frame_eval_cls(data.Dataset):
         """
         idb = self.database.iloc[index]
         frame_idx = idb[0]
-        video = idb[2]
-        ps = idb[4]
-        Class = idb[1]
+        video = idb[1]
+        ps = idb[2]
+        #Class = idb[1]
 
         images = self._load_image(self.data_path  + frame_idx + '.png')
         images = np.expand_dims(images, 2)
@@ -71,7 +71,7 @@ class Fetal_frame_eval_cls(data.Dataset):
         if self.transform is not None:
             images = self.transform(images)
         
-        return images, frame_idx, video, ps, Class
+        return images, frame_idx, video, ps, #Class
 
     def __len__(self):
         return len(self.database)

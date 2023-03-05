@@ -212,7 +212,6 @@ class EffnetV2_Key_Frame(torch.nn.Module):
 
         #print('shape of x', x.shape)
         x = torch.cat(x)
-      #  print('shape of before RFE x', x.shape)
         if self.backbone == 'effnetv2':
             features = self.model.features(x)
         elif self.backbone == 'uninet':

@@ -46,7 +46,7 @@ def parse_option():
     )
 
     # easy config modification
-    parser.add_argument('--batch-size', type=int, help="batch size for single GPU")
+    parser.add_argument('--batch_size', type=int, help="batch size for single GPU")
     parser.add_argument('--data_path', type=str, help='path to dataset')
     parser.add_argument('--zip', action='store_true', help='use zipped dataset instead of folder dataset')
     parser.add_argument('--cache-mode', type=str, default='part', choices=['no', 'full', 'part'],
@@ -92,6 +92,7 @@ def parse_option():
     parser.add_argument('--use_head', help = 'whether to use regression head in model')
     parser.add_argument('--backbone', type = str,  help = 'what bacbkone to use')
     parser.add_argument('--img_size', type = int, help = 'size of input img')
+    parser.add_argument("--weight_decay", type = float, help='r2 regularization')
     args, unparsed = parser.parse_known_args()
 
     config = get_config(args)
@@ -291,11 +292,11 @@ def validate(config, data_loader, model):
     frames = []
     videos = []
     measures = []
-    Classes = torch.tensor([]).cuda()
+    #Classes = torch.tensor([]).cuda()
     probs = torch.tensor([]).cuda()
     pss = torch.tensor([]).cuda()
     batch = 0
-    for idx, (images, frame, video, ps, Class) in enumerate(data_loader):
+    for idx, (images, frame, video, ps) in enumerate(data_loader):
         batch += 1
         print(f'Batch {batch} out of {len(data_loader)}')
             #labels = labels.cuda(non_blocking=True)
@@ -303,27 +304,32 @@ def validate(config, data_loader, model):
             
         if config.MODEL.TASK_TYPE == 'cls':
             output = model(images)
-            prob = output.softmax(dim = 1).max(dim = 1)[0]
+            if video[0].split('_')[1] == '1':
+                prob = output.softmax(dim = 1)[:, 2]
+            elif video[0].split('_')[1] == '2':
+                prob = output.softmax(dim = 1)[:, 4]
+            elif video[0].split('_')[1] == '3':
+                prob = output.softmax(dim = 1)[:, 6]
             result = output.softmax(dim = 1).max(dim = 1)[1].to(torch.int64)
             videos.append(video[0])
             probs = torch.cat((probs, prob.cuda()))
             results = torch.cat((results, result.cuda()))
             pss = torch.cat((pss, ps.cuda()))
             frames.append(frame[0])
-            Classes = torch.cat((Classes, Class.cuda()))
+            #Classes = torch.cat((Classes, Class.cuda()))
             #Classes = torch.stack(Classes)
             #Classes = Classes.numpy()
         
     print('frames len' + str(len(frames)))
     print('videos len' + str(len(videos)))
     print('results len' + str(len(results)))
-    print('Classes len' + str(len(Classes)))
+    #print('Classes len' + str(len(Classes)))
     print('probs len' + str(len(probs)))
     print('ps len' + str(len(pss)))
     
-    data_frame = pd.DataFrame({'index': frames, 'video': videos, 'predict': results.cpu(), 'gt': Classes.cpu(), 'probs': probs.cpu(), 'ps': pss.cpu()})
+    data_frame = pd.DataFrame({'index': frames, 'video': videos, 'predict': results.cpu(), 'probs': probs.cpu(), 'ps': pss.cpu()})
     print('Saving...')
-    data_frame.to_csv('/data/kpusteln/Fetal-RL/data_preparation/test_data/results_cls_head_attention.csv', index = False)
+    data_frame.to_csv('/data/kpusteln/Fetal-RL/data_preparation/test_data/results_cls_new_model.csv', index = False)
     print('Finished!')
         
 

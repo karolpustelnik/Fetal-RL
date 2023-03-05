@@ -46,8 +46,8 @@ def parse_option():
     )
 
     # easy config modification
-    parser.add_argument('--batch-size', type=int, help="batch size for single GPU")
-    parser.add_argument('--data-path', type=str, help='path to dataset')
+    parser.add_argument('--batch_size', type=int, help="batch size for single GPU")
+    parser.add_argument('--data_path', type=str, help='path to dataset')
     parser.add_argument('--zip', action='store_true', help='use zipped dataset instead of folder dataset')
     parser.add_argument('--cache-mode', type=str, default='part', choices=['no', 'full', 'part'],
                         help='no: no cache, '
@@ -92,6 +92,7 @@ def parse_option():
     parser.add_argument('--use_head', help = 'whether to use head in kfa')
     parser.add_argument('--backbone', type = str,  help = 'what bacbkone to use')
     parser.add_argument('--img_size', type = int, help = 'size of input img')
+    parser.add_argument("--weight_decay", type = float, help='r2 regularization')
     args, unparsed = parser.parse_known_args()
 
     config = get_config(args)
@@ -335,7 +336,7 @@ def validate(config, data_loader, model):
     elif config.MODEL.TASK_TYPE == 'reg':
         data_frame = pd.DataFrame({'video': videos, 'measures': measures})
         print('Saving...')
-        data_frame.to_csv('/data/kpusteln/Fetal-RL/data_preparation/test_data/results_reg_baseline2.csv', index = False)
+        data_frame.to_csv('/data/kpusteln/Fetal-RL/data_preparation/test_data/results_reg_baseline_new_detector.csv', index = False)
         print('Finished!')
         
 

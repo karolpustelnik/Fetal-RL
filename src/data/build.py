@@ -127,7 +127,7 @@ def build_loader(config):
             sampler=sampler_train,
             shuffle = False,
             batch_size=config.DATA.BATCH_SIZE,
-            num_workers=8,
+            num_workers=4,
             drop_last = True,
             collate_fn = collater)
         
@@ -136,7 +136,7 @@ def build_loader(config):
             sampler = sampler_val,
             shuffle = False,
             batch_size=config.DATA.BATCH_SIZE,
-            num_workers=8,
+            num_workers=4,
             drop_last=True if config.TRAIN.AUTO_RESUME else False,
             collate_fn = collater)
         

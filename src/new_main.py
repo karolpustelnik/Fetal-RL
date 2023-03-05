@@ -44,10 +44,10 @@ def setup(rank, world_size):
         world_size: number of processes
     """
     os.environ['MASTER_ADDR'] = 'localhost'
-    if world_size == 1:
-        port = str(random.randint(100, 60000))
-    else:
+    if world_size > 1:
         port = '29500'
+    else:
+        port = str(random.randint(100, 60000))
     os.environ['MASTER_PORT'] = port
 
     # initialize the process group
@@ -66,7 +66,7 @@ def parse_option():
     )
 
     # easy config modification
-    parser.add_argument('--batch-size', type=int, help="batch size for single GPU")
+    parser.add_argument('--batch_size', type=int, help="batch size for single GPU")
     parser.add_argument('--data_path', type=str, help='path to dataset')
     parser.add_argument('--zip', action='store_true', help='use zipped dataset instead of folder dataset')
     parser.add_argument('--cache-mode', type=str, default='part', choices=['no', 'full', 'part'],
@@ -140,10 +140,9 @@ def main(rank, world_size, config):
     linear_scaled_lr = float(config.TRAIN.BASE_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
     linear_scaled_warmup_lr = float(config.TRAIN.WARMUP_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
     linear_scaled_min_lr = float(config.TRAIN.MIN_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
-    name = config.MODEL.NAME + f"bacbkone_{config.MODEL.BACKBONE}_body_part{config.MODEL.BODY_PART}_bs{config.DATA.BATCH_SIZE}_lr{config.TRAIN.BASE_LR}_drop{config.MODEL.DROP_RATE}_n_frames{config.TRAIN.NUM_FRAMES}_key_frame_att{config.MODEL.KEY_FRAME_ATTENTION}_alpha{config.MODEL.USE_ALPHA}_use_skip_connection{config.MODEL.USE_SKIP_CONNECTION}_use_gelu{config.MODEL.USE_GELU}_use_batch_norm{config.MODEL.USE_BATCH_NORM}_use_head{config.MODEL.USE_HEAD}"
+    name = config.MODEL.NAME + f"bacbkone_{config.MODEL.BACKBONE}_body_part{config.MODEL.BODY_PART}_weight_decay_{config.TRAIN.WEIGHT_DECAY}_bs{config.DATA.BATCH_SIZE}_lr{config.TRAIN.BASE_LR}_drop{config.MODEL.DROP_RATE}_n_frames{config.TRAIN.NUM_FRAMES}_key_frame_att{config.MODEL.KEY_FRAME_ATTENTION}_alpha{config.MODEL.USE_ALPHA}_use_skip_connection{config.MODEL.USE_SKIP_CONNECTION}_use_gelu{config.MODEL.USE_GELU}_use_batch_norm{config.MODEL.USE_BATCH_NORM}_use_head{config.MODEL.USE_HEAD}"
     output = os.path.join(config.OUTPUT, name, config.TAG)
     config.defrost()
-    config.DATA.BATCH_SIZE = config.DATA.BATCH_SIZE * dist.get_world_size()
     config.TRAIN.BASE_LR = linear_scaled_lr
     config.TRAIN.WARMUP_LR = linear_scaled_warmup_lr
     config.TRAIN.MIN_LR = linear_scaled_min_lr
@@ -182,15 +181,12 @@ def main(rank, world_size, config):
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank], broadcast_buffers=False)
         print('Model wrapped in DDP!')
     loss_scaler = NativeScalerWithGradNormCount()
-
+    print('data loader lenght', len(data_loader_train))
     if config.TRAIN.ACCUMULATION_STEPS > 1:
         lr_scheduler = build_scheduler(config, optimizer, len(data_loader_train) // config.TRAIN.ACCUMULATION_STEPS)
     else:
-        if config.MODEL.TASK_TYPE == 'reg':
-            lr_scheduler = build_scheduler(config, optimizer, 36256/(config.DATA.BATCH_SIZE * config.TRAIN.NUM_FRAMES))
-        else:
-            lr_scheduler = build_scheduler(config, optimizer, len(data_loader_train)/config.DATA.BATCH_SIZE)
-        
+        lr_scheduler = build_scheduler(config, optimizer, len(data_loader_train)/config.DATA.BATCH_SIZE)
+    prefix = config.DATA.PATH_PREFIX
     #normed_weight = torch.load('/home/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/precision_weights.pt').cuda()
     if config.MODEL.BODY_PART == 'abdomen':
         weights = torch.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/abdomen_class_weight.pt').cuda()
@@ -376,6 +372,7 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
 @torch.no_grad()
 def validate(config, data_loader, model, logger):
     #normed_weight = torch.load('/home/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/normedWeights.pt').cuda()
+    prefix = config.DATA.PATH_PREFIX
     if config.MODEL.BODY_PART == 'abdomen':
         weights = torch.load(f'{prefix}/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/abdomen_class_weight.pt').cuda()
     elif config.MODEL.BODY_PART == 'head':
@@ -522,7 +519,7 @@ def validate(config, data_loader, model, logger):
     if config.MODEL.TASK_TYPE == 'cls':
         predicts = reduce_tensor(predicts)
         Classes = reduce_tensor(Classes)
-        acc = accuracy(predicts, Classes.int())
+        acc = accuracy(predicts, Classes.int(), average = 'macro', num_classes=config.MODEL.NUM_CLASSES)
         precision, recall = precision_recall(predicts, Classes.int(), average = 'macro', 
                                             multiclass = True ,num_classes=config.MODEL.NUM_CLASSES)
         precision_per_class, recall_per_class = precision_recall(predicts, Classes.int(), average = None, num_classes=config.MODEL.NUM_CLASSES, multiclass = True)
