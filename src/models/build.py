@@ -12,7 +12,7 @@ from .D_models.swin_video import SwinTransformer3D
 def build_model(config):
     model_type = config.MODEL.TYPE
     print('Model type: ', model_type)
-    
+    print('using bacbkone: ', config.MODEL.BACKBONE)
 
     if model_type == 'effnetv2' or model_type == 'effnetv2_cls_pos_encoding':
         model = EffnetV2_L(out_features = config.MODEL.NUM_CLASSES, dropout= config.MODEL.DROP_RATE, use_sigmoid = config.MODEL.SIGMOID, use_attention = config.MODEL.ATTENTION)
@@ -38,9 +38,9 @@ def build_model(config):
         model = EffnetV2_Key_Frame(out_features = config.MODEL.NUM_CLASSES, dropout= config.MODEL.DROP_RATE, 
                                    use_sigmoid = config.MODEL.SIGMOID, use_attention = config.MODEL.ATTENTION,
                                    use_key_frame_attention=config.MODEL.KEY_FRAME_ATTENTION, n_frames=config.TRAIN.NUM_FRAMES,
-                                   use_alpha = config.MODEL.USE_ALPHA, use_layer_norm=config.MODEL.USE_LAYER_NORM,
+                                   use_alpha = config.MODEL.USE_ALPHA, use_layer_norm=config.MODEL.USE_BATCH_NORM,
                                    use_skip_connection=config.MODEL.USE_SKIP_CONNECTION, use_gelu = config.MODEL.USE_GELU,
-                                   use_head = config.MODEL.USE_HEAD)
+                                   use_head = config.MODEL.USE_HEAD, backbone = config.MODEL.BACKBONE)
         
         
     return model

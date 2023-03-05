@@ -9,26 +9,24 @@ parameters:
   key_frame_attention:
     values:
       - true
-      - False
   use_head:
     values:
-      - true
       - false
   use_gelu:
     values:
-      - false
+      - true
   use_skip_connection:
     values:
       - true
-  use_layer_norm:
+  use_batch_norm:
     values:
-      - false
+      - true
   use_alpha:
     values:
       - true
   dropout:
     distribution: uniform
-    max: 0.3
+    max: 0.2
     min: 0.0
   base_lr:
     distribution: uniform

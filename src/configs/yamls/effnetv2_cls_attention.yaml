@@ -10,14 +10,14 @@ DATA:
 MODEL:
   TYPE: effnetv2
   NAME: effnetv2_bayes_search
-  NUM_CLASSES: 7
+  NUM_CLASSES: 2
   TASK_TYPE: cls
   AFFIX: .csv
   LOSS: 'L1'
   DROP_RATE : 0.4
   SIGMOID: False
   ATTENTION: True
-  BODY_PART: 'all'
+  BODY_PART: 'head'
   KEY_FRAME_ATTENTION: False
 
 TRAIN:

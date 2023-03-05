@@ -44,9 +44,11 @@ def setup(rank, world_size):
         world_size: number of processes
     """
     os.environ['MASTER_ADDR'] = 'localhost'
-    port = str(random.randint(100, 60000))
+    if world_size == 1:
+        port = str(random.randint(100, 60000))
+    else:
+        port = '29500'
     os.environ['MASTER_PORT'] = port
-    os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
 
     # initialize the process group
     dist.init_process_group(backend = "gloo", rank=rank, world_size=world_size)
@@ -65,7 +67,7 @@ def parse_option():
 
     # easy config modification
     parser.add_argument('--batch-size', type=int, help="batch size for single GPU")
-    parser.add_argument('--data-path', type=str, help='path to dataset')
+    parser.add_argument('--data_path', type=str, help='path to dataset')
     parser.add_argument('--zip', action='store_true', help='use zipped dataset instead of folder dataset')
     parser.add_argument('--cache-mode', type=str, default='part', choices=['no', 'full', 'part'],
                         help='no: no cache, '
@@ -106,8 +108,11 @@ def parse_option():
     parser.add_argument('--use_alpha', help = 'whether to use alpha in skip connection')
     parser.add_argument('--use_skip_connection', help = 'whether to use_skip_connection in attention modules')
     parser.add_argument('--use_gelu', help = 'whether to use gelu in attention modules')
-    parser.add_argument('--use_layer_norm', help = 'whether to use layer norm in attention modules')
+    parser.add_argument('--use_batch_norm', help = 'whether to use batch norm in attention modules')
     parser.add_argument('--use_head', help = 'whether to use regression head in model')
+    parser.add_argument('--backbone', type = str,  help = 'what bacbkone to use')
+    parser.add_argument('--img_size', type = int, help = 'size of input img')
+    
     #parser.add_argument('--num_workers', type = int, help='number of workers to use in dataloader')
     
     args, unparsed = parser.parse_known_args()
@@ -134,7 +139,7 @@ def main(rank, world_size, config):
     linear_scaled_lr = float(config.TRAIN.BASE_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
     linear_scaled_warmup_lr = float(config.TRAIN.WARMUP_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
     linear_scaled_min_lr = float(config.TRAIN.MIN_LR * config.DATA.BATCH_SIZE * np.sqrt(dist.get_world_size()))
-    name = config.MODEL.NAME + f"_bs{config.DATA.BATCH_SIZE}_lr{config.TRAIN.BASE_LR}_drop{config.MODEL.DROP_RATE}_n_frames{config.TRAIN.NUM_FRAMES}_key_frame_att{config.MODEL.KEY_FRAME_ATTENTION}_alpha{config.MODEL.USE_ALPHA}_use_skip_connection{config.MODEL.USE_SKIP_CONNECTION}_use_gelu{config.MODEL.USE_GELU}_use_layer_norm{config.MODEL.USE_LAYER_NORM}_use_head{config.MODEL.USE_HEAD}"
+    name = config.MODEL.NAME + f"bacbkone_{config.MODEL.BACKBONE}_body_part{config.MODEL.BODY_PART}_bs{config.DATA.BATCH_SIZE}_lr{config.TRAIN.BASE_LR}_drop{config.MODEL.DROP_RATE}_n_frames{config.TRAIN.NUM_FRAMES}_key_frame_att{config.MODEL.KEY_FRAME_ATTENTION}_alpha{config.MODEL.USE_ALPHA}_use_skip_connection{config.MODEL.USE_SKIP_CONNECTION}_use_gelu{config.MODEL.USE_GELU}_use_batch_norm{config.MODEL.USE_BATCH_NORM}_use_head{config.MODEL.USE_HEAD}"
     output = os.path.join(config.OUTPUT, name, config.TAG)
     config.defrost()
     config.DATA.BATCH_SIZE = config.DATA.BATCH_SIZE * dist.get_world_size()
@@ -186,7 +191,15 @@ def main(rank, world_size, config):
             lr_scheduler = build_scheduler(config, optimizer, len(data_loader_train)/config.DATA.BATCH_SIZE)
         
     #normed_weight = torch.load('/home/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/precision_weights.pt').cuda()
-    criterion_cls = torch.nn.CrossEntropyLoss() ## changed
+    if config.MODEL.BODY_PART == 'abdomen':
+        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/abdomen_class_weight.pt').cuda()
+    elif config.MODEL.BODY_PART == 'head':
+        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/head_class_weight.pt').cuda()
+    elif config.MODEL.BODY_PART == 'femur':
+        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/femur_class_weight.pt').cuda()
+    else:
+        weights = None
+    criterion_cls = torch.nn.CrossEntropyLoss(weight = weights)## changed
     criterion_reg = torch.nn.MSELoss() if config.MODEL.LOSS == 'L2' else torch.nn.L1Loss()
 
     max_accuracy = 0.0
@@ -206,13 +219,12 @@ def main(rank, world_size, config):
         max_accuracy = load_checkpoint(config, model, optimizer, lr_scheduler, loss_scaler, logger)
         if config.MODEL.TASK_TYPE == 'cls':
             print('Validating model after loading checkpoint...')
-            acc1, f1_score, recall, precision,  loss_cls, loss_reg = validate(config, data_loader_val, model, logger)
-            logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
-            logger.info(f"f1 score of the network on the {len(dataset_val)} test images: {f1_score*100}%")
+            acc, f1, recall, precision, loss_cls = validate(config, data_loader_val, model, logger)
+            logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc:.1f}%")
+            logger.info(f"f1 score of the network on the {len(dataset_val)} test images: {f1*100}%")
             logger.info(f"recall of the network on the {len(dataset_val)} test images: {recall*100}%")
             logger.info(f"precision of the network on the {len(dataset_val)} test images: {precision*100}%")
             logger.info(f"Loss of the network on the {len(dataset_val)} test images: {loss_cls:.4f}")
-            max_accuracy = max(max_accuracy, acc1)
         elif config.MODEL.TASK_TYPE == 'reg':
             print('Validating model after loading checkpoint...')
             mae_meter, mape_meter, rmse_meter, loss_meter_reg = validate(config, data_loader_val, model, logger)
@@ -227,7 +239,7 @@ def main(rank, world_size, config):
         load_pretrained(config, model, logger)
         if config.MODEL.TASK_TYPE == 'cls':
             print('Validating model after loading pretrained weights...')
-            acc1, f1_score, recall, precision,  loss_cls, loss_reg = validate(config, data_loader_val, model, logger)
+            acc1, f1_score, recall, precision, loss_cls = validate(config, data_loader_val, model, logger)
             logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
             logger.info(f"f1 score of the network on the {len(dataset_val)} test images: {f1_score*100}%")
             logger.info(f"recall of the network on the {len(dataset_val)} test images: {recall*100}%")
@@ -251,9 +263,9 @@ def main(rank, world_size, config):
                 save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler, loss_scaler,
                                 logger)
             if config.MODEL.TASK_TYPE == 'cls':
-                acc1_meter, f1_score_meter, recall_meter, precision_meter = validate(config, data_loader_val, model, logger)
+                acc, f1, recall, precision, loss_cls = validate(config, data_loader_val, model, logger)
                 if rank == 0:
-                    wandb.log({'val_acc': acc1_meter, 'val_f1_score': f1_score_meter, 'val_recall': recall_meter, 'val_precision': precision_meter}, step = epoch)
+                    wandb.log({'val_acc': acc, 'val_f1_score': f1, 'val_recall': recall, 'val_precision': precision}, step = epoch)
             elif config.MODEL.TASK_TYPE == 'reg':
                 if epoch%15 == 0:
                     mae_meter, mape_meter, rmse_meter, loss_meter_reg = validate(config, data_loader_val, model, logger)
@@ -261,7 +273,7 @@ def main(rank, world_size, config):
                         wandb.log({'val_mae': mae_meter, 'val_mape': mape_meter, 'val_rmse': rmse_meter, 'val_loss': loss_meter_reg}, step = epoch)
             
     elif config.EVAL_MODE == True:
-        acc1, f1_score, recall, precision,  loss_cls, loss_reg = validate(config, data_loader_val, model, logger)
+        acc, f1, recall, precision, loss_cls = validate(config, data_loader_val, model, logger)
         if config.MODEL.TASK_TYPE == 'cls':
             logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
             logger.info(f"f1 score of the network on the {len(dataset_val)} test images: {f1_score*100}%")
@@ -287,9 +299,7 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
     loss_meter_reg = AverageMeter()
     norm_meter = AverageMeter()
     scaler_meter = AverageMeter()
-    
-    start = time.time()
-    end = time.time()
+
     for idx, (images, Class, measure, ps, frames_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized, org_seq_lens) in enumerate(data_loader): ## changed
         optimizer.zero_grad()
         if config.PARALLEL_TYPE == 'ddp':
@@ -340,7 +350,7 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
 
             
 
-        if idx % config.PRINT_FREQ == 0:
+        if idx == num_steps - 1:
             lr = optimizer.param_groups[0]['lr']
             if config.MODEL.TASK_TYPE == 'cls':
                 logger.info(
@@ -365,7 +375,15 @@ def train_one_epoch(config, model, criterion_cls, criterion_reg, data_loader, op
 @torch.no_grad()
 def validate(config, data_loader, model, logger):
     #normed_weight = torch.load('/home/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/normedWeights.pt').cuda()
-    criterion_cls = torch.nn.CrossEntropyLoss() ## changed
+    if config.MODEL.BODY_PART == 'abdomen':
+        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/abdomen_class_weight.pt').cuda()
+    elif config.MODEL.BODY_PART == 'head':
+        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/head_class_weight.pt').cuda()
+    elif config.MODEL.BODY_PART == 'femur':
+        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/femur_class_weight.pt').cuda()
+    else:
+        weights = None
+    criterion_cls = torch.nn.CrossEntropyLoss(weight = weights) ## changed
     criterion_reg = torch.nn.MSELoss() if config.MODEL.LOSS == 'L2' else torch.nn.L1Loss()
     mae = MeanAbsoluteError().cuda()
     mape = MeanAbsolutePercentageError().cuda()
@@ -375,16 +393,21 @@ def validate(config, data_loader, model, logger):
     
     loss_meter_cls = AverageMeter()
     loss_meter_reg = AverageMeter()
-    acc1_meter = AverageMeter()
-    precision_meter = AverageMeter()
-    recall_meter = AverageMeter()
-    f1_score_meter = AverageMeter()
-    
+    # acc1_meter = AverageMeter()
+    # precision_meter = AverageMeter()
+    # recall_meter = AverageMeter()
+    # f1_score_meter = AverageMeter()
+    Classes = torch.tensor([]).cuda()
+    predicts = torch.tensor([]).cuda()
     mae_meter = AverageMeter()
     mape_meter = AverageMeter()
     rmse_meter = AverageMeter()
-
-    worst_losses = []
+    if config.MODEL.BODY_PART == 'abdomen':
+        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/abdomen_class_weight.pt').cuda()
+    elif config.MODEL.BODY_PART == 'head':
+        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/head_class_weight.pt').cuda()
+    elif config.MODEL.BODY_PART == 'femur':
+        weights = torch.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/femur_class_weight.pt').cuda()
     for idx, (images, Class, measure, ps, frames_n, measure_scaled, index, days_normalized, frame_loc, measure_normalized, org_seq_lens) in enumerate(data_loader):
         #images = images.to(torch.float32)
         if config.PARALLEL_TYPE == 'ddp':
@@ -414,28 +437,17 @@ def validate(config, data_loader, model, logger):
         # measure accuracy and record loss
         if config.MODEL.TASK_TYPE == 'cls':
             Class = Class.cuda(non_blocking=True)
-            Class = Class.squeeze(0)
+            Classes = torch.cat((Classes, Class), dim = 0)
+            predict = outputs.softmax(dim = 1).max(dim = 1)[1].to(torch.int64).cuda(non_blocking=True)
+            predicts = torch.cat((predicts, predict), dim = 0)
+            
+            
             with torch.autocast(device_type='cuda', dtype=torch.float16):
                 loss_cls = criterion_cls(outputs, Class)
-            acc1 = accuracy(outputs, Class, num_classes=config.MODEL.NUM_CLASSES, average = 'macro', 
-                            mdmc_average = 'global' if config.PARALLEL_TYPE == 'model_parallel' else None)
-            precision, recall = precision_recall(outputs, Class, num_classes=config.MODEL.NUM_CLASSES, average = 'macro',
-                                                 mdmc_average = 'global' if config.PARALLEL_TYPE == 'model_parallel' else None)
-            
-            f1 = f1_score(outputs, Class, num_classes=config.MODEL.NUM_CLASSES, average = 'macro', 
-                          mdmc_average = 'global' if config.PARALLEL_TYPE == 'model_parallel' else None)
             
             if config.PARALLEL_TYPE == 'ddp':
-                acc1 = reduce_tensor(acc1)
-                f1 = reduce_tensor(f1)
-                precision = reduce_tensor(precision)
-                recall = reduce_tensor(recall)
                 loss_cls = reduce_tensor(loss_cls)
             loss_meter_cls.update(loss_cls.item())
-            acc1_meter.update(acc1.item())
-            precision_meter.update(precision.item())
-            recall_meter.update(recall.item())
-            f1_score_meter.update(f1.item())
             
         elif config.MODEL.TASK_TYPE == 'reg':
             measures_train = measure_normalized if config.DATA.IMG_SCALING else measure_scaled
@@ -485,16 +497,16 @@ def validate(config, data_loader, model, logger):
             
 
 
-        if idx % config.PRINT_FREQ == 0:
+        if idx == len(data_loader) - 1:
             if config.MODEL.TASK_TYPE == 'cls':
                 
                 logger.info(
                     f'Test: [{idx}/{len(data_loader)}]\t'
-                    f'cls Loss {loss_meter_cls.val:.4f} ({loss_meter_cls.avg:.4f})\t' 
-                    f'Acc@1 {acc1_meter.val:.3f} ({acc1_meter.avg:.3f})\t' 
-                    f'f@1_score {f1_score_meter.val:.3f} ({f1_score_meter.avg:.3f})\t'
-                    f'recall {recall_meter.val:.3f} ({recall_meter.avg:.3f})\t' 
-                    f'precision {precision_meter.val:.3f} ({precision_meter.avg:.3f})\t')
+                    f'cls Loss {loss_meter_cls.val:.4f} ({loss_meter_cls.avg:.4f})\t' )
+                    # f'Acc@1 {acc:.3f}\t' 
+                    # f'f@1_score {f1:.3f}\t'
+                    # f'recall {recall:.3f}\t' 
+                    # f'precision {precision:.3f}\t')
             elif config.MODEL.TASK_TYPE == 'reg':
                 print(f"Example measure prediction: {predicted_measure[0]}, real measure: {measure[0]}, mae: {mae_value}, mape: {mape_value}, rmse: {rmse_value}")
                 logger.info(
@@ -503,20 +515,25 @@ def validate(config, data_loader, model, logger):
                     f'mae {mae_meter.val:.3f} ({mae_meter.avg:.3f})\t' 
                     f'mape {mape_meter.val:.3f} ({mape_meter.avg:.3f})\t' 
                     f'rmse {rmse_meter.val:.3f} ({rmse_meter.avg:.3f})\t')
-                
+    
+    acc = accuracy(predicts, Classes.int())
+    precision, recall = precision_recall(predicts, Classes.int(), average='macro')
+    precision_per_class, recall_per_class = precision_recall(predicts, Classes.int(), average = None)
+    f1 = f1_score(predicts, Classes.int(), average='macro')
+    print('Recall and precision per class:', recall_per_class, precision_per_class)
     if config.MODEL.TASK_TYPE == 'cls':
         print('Finished validation! Results:')
-        logger.info(f' * Acc@1 {acc1_meter.avg:.3f}')
-        logger.info(f' * f@1_score {f1_score_meter.avg:.3f}')
-        logger.info(f' * recall {recall_meter.avg:.3f}')
-        logger.info(f' * precision {precision_meter.avg:.3f}')
+        logger.info(f' * Acc@1 {acc:.3f}')
+        logger.info(f' * f@1_score {f1:.3f}')
+        logger.info(f' * recall {recall:.3f}')
+        logger.info(f' * precision {precision:.3f}')
         logger.info(f' * cls loss {loss_meter_cls.avg:.3f}')
         if dist.get_rank() == 0:
             wandb.log({"Val Loss": loss_meter_cls.avg,})
-            wandb.log({"Val Acc": acc1_meter.avg,})
-            wandb.log({"Val F1": f1_score_meter.avg,})
-            wandb.log({"Val Recall": recall_meter.avg,})
-            wandb.log({"Val Precision": precision_meter.avg,})
+            wandb.log({"Val Acc": acc,})
+            wandb.log({"Val F1": f1,})
+            wandb.log({"Val Recall": recall,})
+            wandb.log({"Val Precision": precision,})
     elif config.MODEL.TASK_TYPE == 'reg':
         print('Finished validation! Results:')
         logger.info(f' * mae {mae_meter.avg:.3f}')
@@ -530,7 +547,7 @@ def validate(config, data_loader, model, logger):
             wandb.log({"Val RMSE": rmse_meter.avg,})
     
     if config.MODEL.TASK_TYPE == 'cls':
-        return acc1_meter.avg, f1_score_meter.avg, recall_meter.avg, precision_meter.avg
+        return acc, f1, recall, precision, loss_meter_cls.avg
     elif config.MODEL.TASK_TYPE == 'reg':
         return mae_meter.avg, mape_meter.avg, rmse_meter.avg, loss_meter_reg.avg
 

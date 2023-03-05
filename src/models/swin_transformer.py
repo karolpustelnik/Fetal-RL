@@ -9,22 +9,8 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
-from torchvision.models.resnet import resnet18
-from torchvision.models import resnet101
-from torchvision.models import efficientnet_b6, efficientnet_v2_s
-from efficientnet_pytorch import EfficientNet
-try:
-    import os, sys
 
-    kernel_path = os.path.abspath(os.path.join('..'))
-    sys.path.append(kernel_path)
-    from kernels.window_process.window_process import WindowProcess, WindowProcessReverse
 
-except:
-    WindowProcess = None
-    WindowProcessReverse = None
-    print("[Warning] Fused window process have not been installed. Please refer to get_started.md for installation.")
-    
 
 class Mlp(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
@@ -198,7 +184,7 @@ class SwinTransformerBlock(nn.Module):
     def __init__(self, dim, input_resolution, num_heads, window_size=7, shift_size=0,
                  mlp_ratio=4., qkv_bias=True, qk_scale=None, drop=0., attn_drop=0., drop_path=0.,
                  act_layer=nn.GELU, norm_layer=nn.LayerNorm,
-                 fused_window_process=False, classfication = False):
+                 fused_window_process=False):
         super().__init__()
         self.dim = dim
         self.input_resolution = input_resolution
@@ -484,23 +470,7 @@ class PatchEmbed(nn.Module):
             flops += Ho * Wo * self.embed_dim
         return flops
 
-class Resnet18Backbone(nn.Module):
-    
-    def __init__(self,):
-        super().__init__()
-        self.backbone = resnet18(pretrained=True)
-        self.backbone.conv1 = torch.nn.Conv2d(in_channels=1, out_channels=64,
-                                        kernel_size=(7, 7), stride=(2, 2), padding=(3, 3))
-        self.backbone.layer3[0].conv1 = torch.nn.Conv2d(128, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-        self.backbone.layer3[0].downsample[0] = torch.nn.Conv2d(128, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-        self.backbone.layer4[0].conv1 = torch.nn.Conv2d(256, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-        self.backbone.layer4[0].downsample[0] = torch.nn.Conv2d(256, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-        self.feature_extraction_resnet = torch.nn.Sequential(*list(self.backbone.children())[:-2])
-        
-        
-    def forward(self, x):
-        x = self.feature_extraction_resnet(x)
-        return x
+
 class SwinTransformer(nn.Module):
     r""" Swin Transformer
         A PyTorch impl of : `Swin Transformer: Hierarchical Vision Transformer using Shifted Windows`  -
@@ -528,12 +498,12 @@ class SwinTransformer(nn.Module):
         fused_window_process (bool, optional): If True, use one kernel to fused window shift & window partition for acceleration, similar for the reversed part. Default: False
     """
 
-    def __init__(self, img_size=64, patch_size=2, in_chans=512, num_classes=7,
-                 embed_dim=96, task_type = 'cls', depths=[2, 2, 6, 2], num_heads=[3, 6, 12, 24],
-                 window_size=4, mlp_ratio=4., qkv_bias=True, qk_scale=None,
-                 drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
+    def __init__(self, img_size=384, patch_size=4, in_chans=1, num_classes=1,
+                 embed_dim=128, depths=[2, 2, 18, 2], num_heads=[4, 8, 16, 32],
+                 window_size=12, mlp_ratio=4., qkv_bias=True, qk_scale=None,
+                 drop_rate=0., attn_drop_rate=0., drop_path_rate=0.2,
                  norm_layer=nn.LayerNorm, ape=False, patch_norm=True,
-                 use_checkpoint=False, fused_window_process=False, resnet_backone = False, **kwargs):
+                 use_checkpoint=False, fused_window_process=False, **kwargs):
         super().__init__()
 
         self.num_classes = num_classes
@@ -543,11 +513,7 @@ class SwinTransformer(nn.Module):
         self.patch_norm = patch_norm
         self.num_features = int(embed_dim * 2 ** (self.num_layers - 1))
         self.mlp_ratio = mlp_ratio
-        self.task_type = task_type
-        self.resnet_bacbkone = resnet_backone
-        #resnet backbone
-        if self.resnet_bacbkone:
-            self.feature_extraction_resnet = Resnet18Backbone()
+
         # split image into non-overlapping patches
         self.patch_embed = PatchEmbed(
             img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim,
@@ -587,10 +553,8 @@ class SwinTransformer(nn.Module):
 
         self.norm = norm_layer(self.num_features)
         self.avgpool = nn.AdaptiveAvgPool1d(1)
-        if self.task_type == 'cls':
-            self.head = nn.Linear(self.num_features, num_classes)
-        if self.task_type == 'reg':
-            self.reg_head = nn.Linear(self.num_features, 1)
+        self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
+
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
@@ -625,18 +589,8 @@ class SwinTransformer(nn.Module):
         return x
 
     def forward(self, x):
-        if self.task_type == 'cls':
-            if self.resnet_bacbkone:
-                x = self.feature_extraction_resnet(x)
-            x = self.forward_features(x)
-            x = self.head(x)
-            return x
-        elif self.task_type == 'reg':
-            x = self.forward_features(x)
-            x = self.reg_head(x)
-            x_score = x.squeeze(1)
-            x_score = torch.sigmoid(x_score)
-            return x_score
+        x = self.forward_features(x)
+        return x
 
     def flops(self):
         flops = 0
@@ -646,71 +600,8 @@ class SwinTransformer(nn.Module):
         flops += self.num_features * self.patches_resolution[0] * self.patches_resolution[1] // (2 ** self.num_layers)
         flops += self.num_features * self.num_classes
         return flops
-
-
-class ResNet101(torch.nn.Module):
-    def __init__(self, out_features=7):
-        super().__init__()
-        self.out_features = out_features
-        self.backbone = resnet101(pretrained=True)
-        self.backbone.conv1 = torch.nn.Conv2d(in_channels=1, out_channels=64,
-                                        kernel_size=(7, 7), stride=(2, 2), padding=(3, 3))
-        self.backbone.fc = torch.nn.Linear(in_features=2048, out_features=out_features)
-
-    def forward(self, x):
-        x = self.backbone(x)
-        return x
-
-
-class EffNet_v0(torch.nn.Module):
-    def __init__(self, out_features = 7):
-        super().__init__()
-        self.out_features = out_features
-        
-        self.backbone = EfficientNet.from_pretrained('efficientnet-b6', in_channels = 1, num_classes=self.out_features)
-        self.sigmoid = torch.nn.Sigmoid()
-    def forward(self, x):
-        x = self.backbone(x)
-        if self.out_features == 1:
-            x = self.sigmoid(x)
-        return x
     
-class EffNet(torch.nn.Module):
-    def __init__(self, out_features = 7, use_pretrained = False, extract = False, freeze = False, unfreeze_last_layers = False):
-        super(EffNet, self).__init__()
-        self.out_features = out_features
-        self.extract = extract
-        self.sigmoid = torch.nn.Sigmoid()
-        self.backbone = EfficientNet.from_pretrained('efficientnet-b6', in_channels = 1, num_classes=self.out_features).float()
-        #self.fc = torch.nn.Linear(in_features=2304, out_features=out_features, bias=True).float()
-        if use_pretrained:
-            model = torch.load('/data/kpusteln/Fetal-RL/swin-transformer/output/effnet_cls/default/ckpt_epoch_4.pth')['model']
-            for key in list(model.keys()):
-                if 'backbone' in key:
-                    model[key.replace('backbone.', '')] = model.pop(key) # remove prefix backbone.
-            self.backbone.load_state_dict(model)
-        if self.extract:    ## extract features for the transformer, ignore last layer
-            self.backbone._fc = torch.nn.Identity()
-        if freeze:
-            for param in self.backbone.parameters():
-                    param.requires_grad = False
-                
-        if unfreeze_last_layers:
-            for param in self.backbone._blocks[44:].parameters():
-                    param.requires_grad = True
-                
-    def count_params(self):
-        return sum(p.numel() for p in self.parameters() if p.requires_grad)
-
-    def forward(self, x):
-        output = self.backbone(x)
-        #x = self.fc(x)
-        return output
     
-# test_tensor = (torch.rand(8, 1, 512, 512).cuda(), 1)
-# model = EffNet(out_features = 3, use_pretrained = False, extract = False, freeze = False, unfreeze_last_layers = False)
-# #model = efficientnet_v2_s(pretrained=False, num_classes=1, task_type='cls', in_channels=10)
-# print(sum(p.numel() for p in model.parameters()))
-# model.cuda()
-# #print(model.count_params())
-# print(model(test_tensor)[0].shape)
+# test_tensor = torch.rand(1, 1, 384, 384)
+# model = SwinTransformer()
+# print(model(test_tensor).shape)

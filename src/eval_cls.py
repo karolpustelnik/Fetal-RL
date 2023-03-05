@@ -37,7 +37,7 @@ from utils import load_checkpoint, load_pretrained, save_checkpoint, NativeScale
 
 def parse_option():
     parser = argparse.ArgumentParser('Swin Transformer training and evaluation script', add_help=False)
-    parser.add_argument('--cfg', type=str, required=True, metavar="FILE", help='path to config file', )
+    parser.add_argument('--cfg', type=str, default='configs/yamls/effnetv2_reg_img_scaling.yaml', metavar="FILE", help='path to config file', )
     parser.add_argument(
         "--opts",
         help="Modify config options by adding 'KEY VALUE' pairs. ",
@@ -47,7 +47,7 @@ def parse_option():
 
     # easy config modification
     parser.add_argument('--batch-size', type=int, help="batch size for single GPU")
-    parser.add_argument('--data-path', type=str, help='path to dataset')
+    parser.add_argument('--data_path', type=str, help='path to dataset')
     parser.add_argument('--zip', action='store_true', help='use zipped dataset instead of folder dataset')
     parser.add_argument('--cache-mode', type=str, default='part', choices=['no', 'full', 'part'],
                         help='no: no cache, '
@@ -88,7 +88,10 @@ def parse_option():
     parser.add_argument('--use_alpha', help = 'whether to use alpha in skip connection')
     parser.add_argument('--use_skip_connection', help = 'whether to use_skip_connection in attention modules')
     parser.add_argument('--use_gelu', help = 'whether to use gelu in attention modules')
-    parser.add_argument('--use_layer_norm', help = 'whether to use layer norm in attention modules')
+    parser.add_argument('--use_batch_norm', help = 'whether to use batch norm in attention modules')
+    parser.add_argument('--use_head', help = 'whether to use regression head in model')
+    parser.add_argument('--backbone', type = str,  help = 'what bacbkone to use')
+    parser.add_argument('--img_size', type = int, help = 'size of input img')
     args, unparsed = parser.parse_known_args()
 
     config = get_config(args)
@@ -284,69 +287,44 @@ def validate(config, data_loader, model):
     rmse_meter = AverageMeter()
 
     worst_losses = []
-    results = torch.tensor([])
+    results = torch.tensor([]).cuda()
     frames = []
     videos = []
     measures = []
-    Classes = []
-    probs = torch.tensor([])
-    pss = []
+    Classes = torch.tensor([]).cuda()
+    probs = torch.tensor([]).cuda()
+    pss = torch.tensor([]).cuda()
     batch = 0
-    for idx, (images, frame_name, video, ps, Class) in enumerate(data_loader):
+    for idx, (images, frame, video, ps, Class) in enumerate(data_loader):
         batch += 1
         print(f'Batch {batch} out of {len(data_loader)}')
-        if config.PARALLEL_TYPE == 'ddp':
             #labels = labels.cuda(non_blocking=True)
-            #print(labels.shape)
-        if config.MODEL.TYPE == 'effnetv2_key_frame':
-            outputs = model(images) 
-        if config.MODEL.TASK_TYPE == 'cls':
-            predicted_classes = torch.nn.functional.softmax(outputs, dim=1).argmax(dim = 1).cpu()
-            probabilities = torch.nn.functional.softmax(outputs, dim=1).max(dim = 1)[0].cpu()
-            results = torch.cat((results, predicted_classes), 0)
-            probs = torch.cat((probs, probabilities), 0)
-            frames.extend(list(frame_name))
-            videos.extend(list(video))
-            print(ps)
-            print(ps.shape)
-            pss.extend(list(ps))
-            Class = Class.cpu().numpy()
-            Classes.extend(list(Class))
-        elif config.MODEL.TASK_TYPE == 'reg':
-            ps = ps.unsqueeze(1)
-            ps = ps.cpu().numpy()
-            print(f'shape of ps :{ps.shape}')
-            print(f'shape of outputs :{outputs.shape}')
-            scaler = joblib.load('/data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/all/all_scaler')            
-            print(outputs)
-            print(ps)
-            predicted_measure = scaler.inverse_transform(outputs.cpu().numpy()) * ps
-            print('Shape of predicted measure: ', predicted_measure.shape)
-            #predicted_measure = outputs * max_measure * ps
-            predicted_measure = predicted_measure.squeeze(1)
-            measures.extend(predicted_measure)
-            frames.extend(list(frame_name))
-            videos.extend(list(video))
+            #print(labels.shape
             
-    if config.MODEL.TASK_TYPE == 'cls':
-        results = results.to(torch.int64)
-        #Classes = torch.stack(Classes)
-        #Classes = Classes.numpy()
-        print('frames len' + str(len(frames)))
-        print('videos len' + str(len(videos)))
-        print('results len' + str(len(results)))
-        print('Classes len' + str(len(Classes)))
-        print('probs len' + str(len(probs)))
-        print('ps len' + str(len(pss)))
-        data_frame = pd.DataFrame({'index': frames, 'video': videos, 'predict': results, 'gt': Classes, 'probs': probs, 'ps': pss})
-        print('Saving...')
-        data_frame.to_csv('/data/kpusteln/Fetal-RL/data_preparation/test_data/results_cls_spatial_attention.csv', index = False)
-        print('Finished!')
-    elif config.MODEL.TASK_TYPE == 'reg':
-        data_frame = pd.DataFrame({'index': frames, 'video': videos, 'measures': measures})
-        print('Saving...')
-        data_frame.to_csv('/data/kpusteln/Fetal-RL/data_preparation/test_data/results_reg_bayes_test_fixed.csv', index = False)
-        print('Finished!')
+        if config.MODEL.TASK_TYPE == 'cls':
+            output = model(images)
+            prob = output.softmax(dim = 1).max(dim = 1)[0]
+            result = output.softmax(dim = 1).max(dim = 1)[1].to(torch.int64)
+            videos.append(video[0])
+            probs = torch.cat((probs, prob.cuda()))
+            results = torch.cat((results, result.cuda()))
+            pss = torch.cat((pss, ps.cuda()))
+            frames.append(frame[0])
+            Classes = torch.cat((Classes, Class.cuda()))
+            #Classes = torch.stack(Classes)
+            #Classes = Classes.numpy()
+        
+    print('frames len' + str(len(frames)))
+    print('videos len' + str(len(videos)))
+    print('results len' + str(len(results)))
+    print('Classes len' + str(len(Classes)))
+    print('probs len' + str(len(probs)))
+    print('ps len' + str(len(pss)))
+    
+    data_frame = pd.DataFrame({'index': frames, 'video': videos, 'predict': results.cpu(), 'gt': Classes.cpu(), 'probs': probs.cpu(), 'ps': pss.cpu()})
+    print('Saving...')
+    data_frame.to_csv('/data/kpusteln/Fetal-RL/data_preparation/test_data/results_cls_head_attention.csv', index = False)
+    print('Finished!')
         
 
 if __name__ == '__main__':
@@ -365,10 +343,10 @@ if __name__ == '__main__':
     torch.distributed.init_process_group(backend='nccl', init_method='env://', world_size=world_size, rank=rank)
     torch.distributed.barrier()
     seed = config.SEED + dist.get_rank()
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    np.random.seed(seed)
-    random.seed(seed)
+    # torch.manual_seed(seed)
+    # torch.cuda.manual_seed(seed)
+    # np.random.seed(seed)
+    # random.seed(seed)
     cudnn.benchmark = True
 
     # linear scale the learning rate according to total batch size, may not be optimal

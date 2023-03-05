@@ -59,11 +59,11 @@ _C.MODEL.RESUME_REGRESOR = ''
 _C.MODEL.NUM_CLASSES = 7
 # Dropout rate
 _C.MODEL.DROP_RATE = 0.0
-
+_C.MODEL.BACKBONE = ''
 _C.MODEL.KEY_FRAME_ATTENTION = True
 
 _C.MODEL.USE_GELU = True
-_C.MODEL.USE_LAYER_NORM = True
+_C.MODEL.USE_BATCH_NORM = True
 _C.MODEL.USE_SKIP_CONNECTION = True
 _C.MODEL.USE_ALPHA = True
 
@@ -135,7 +135,7 @@ _C.OUTPUT = ''
 # Tag of experiment, overwritten by command line argument
 _C.TAG = 'default'
 # Frequency to save checkpoint
-_C.SAVE_FREQ = 10
+_C.SAVE_FREQ = 15
 # Frequency to logging info
 _C.PRINT_FREQ = 100
 # Fixed random seed
@@ -215,6 +215,7 @@ def update_config(config, args):
     if args.base_lr:
         config.TRAIN.BASE_LR = args.base_lr
     if args.optimizer:
+        print("Optimizer is set to {}".format(args.optimizer))
         config.TRAIN.OPTIMIZER.NAME = args.optimizer
     if args.scaling:
         config.DATA.IMG_SCALING = True if args.scaling == 'True' else False
@@ -230,14 +231,19 @@ def update_config(config, args):
         config.TRAIN.NUM_FRAMES = args.num_frames
     if args.use_gelu:
         config.MODEL.USE_GELU = True if args.use_gelu == 'True' else False
-    if args.use_layer_norm:
-        config.MODEL.USE_LAYER_NORM = True if args.use_layer_norm == 'True' else False
+    if args.use_batch_norm:
+        config.MODEL.USE_BATCH_NORM = True if args.use_batch_norm == 'True' else False
     if args.use_skip_connection:
         config.MODEL.USE_SKIP_CONNECTION = True if args.use_skip_connection == 'True' else False
     if args.use_alpha:
         config.MODEL.USE_ALPHA = True if args.use_alpha == 'True' else False
     if args.use_head:
         config.MODEL.USE_HEAD = True if args.use_head == 'True' else False
+    if args.backbone:
+        print("=> Using backbone: {}".format(args.backbone))
+        config.MODEL.BACKBONE = args.backbone
+    if args.img_size:
+        config.DATA.IMG_SIZE = args.img_size
     
 
     

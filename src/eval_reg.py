@@ -88,7 +88,10 @@ def parse_option():
     parser.add_argument('--use_alpha', help = 'whether to use alpha in skip connection')
     parser.add_argument('--use_skip_connection', help = 'whether to use_skip_connection in attention modules')
     parser.add_argument('--use_gelu', help = 'whether to use gelu in attention modules')
-    parser.add_argument('--use_layer_norm', help = 'whether to use layer norm in attention modules')
+    parser.add_argument('--use_batch_norm', help = 'whether to use layer norm in attention modules')
+    parser.add_argument('--use_head', help = 'whether to use head in kfa')
+    parser.add_argument('--backbone', type = str,  help = 'what bacbkone to use')
+    parser.add_argument('--img_size', type = int, help = 'size of input img')
     args, unparsed = parser.parse_known_args()
 
     config = get_config(args)
@@ -332,7 +335,7 @@ def validate(config, data_loader, model):
     elif config.MODEL.TASK_TYPE == 'reg':
         data_frame = pd.DataFrame({'video': videos, 'measures': measures})
         print('Saving...')
-        data_frame.to_csv('/data/kpusteln/Fetal-RL/data_preparation/test_data/results_reg_kfa.csv', index = False)
+        data_frame.to_csv('/data/kpusteln/Fetal-RL/data_preparation/test_data/results_reg_baseline2.csv', index = False)
         print('Finished!')
         
 

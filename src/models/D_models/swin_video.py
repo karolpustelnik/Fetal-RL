@@ -677,3 +677,4 @@ class SwinTransformer3D(nn.Module):
 # test_tensor = torch.rand(3, 1, 5, 512, 512)
 # output = model(test_tensor)
 # # number of params
+# print(sum(p.numel() for p in model.parameters() if p.requires_grad))

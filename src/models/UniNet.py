@@ -330,7 +330,6 @@ class VisionTransformer(nn.Module):
     def forward_features(self, x):
 
         x = self.stem(x)
-        print(x.shape)
         for i, blk in enumerate(self.blocks):
             if isinstance(blk, DWConvBlock):
                 x = to4d(x)
@@ -496,8 +495,8 @@ def UniNetB6(**kwargs):  # 117M, *, 320
     return model
 
 
-#model = UniNetB6()
+# model = UniNetB6()
 
-#test_tensor = torch.randn(1, 1, 448, 448)
+# test_tensor = torch.randn(1, 1, 448, 448)
 
-#print(model(test_tensor).shape)
+# print(model(test_tensor).shape)

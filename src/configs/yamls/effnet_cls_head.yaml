@@ -1,0 +1,33 @@
+PARALLEL_TYPE: 'ddp'
+DATA:
+  IMG_SIZE: 512
+  DATASET: fetal
+  BATCH_SIZE: 16 #per 1 gpu
+  AUGM: True
+  IMG_SCALING: False
+  TRAIN_SET: /data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/train_head.csv
+  VAL_SET: /data/kpusteln/Fetal-RL/data_preparation/data_biometry/ete_model/biometry_scaled_ps/class_data_split/val_head.csv
+MODEL:
+  TYPE: effnetv2
+  NAME: effnetv2_bayes_search
+  NUM_CLASSES: 2
+  TASK_TYPE: cls
+  AFFIX: .csv
+  LOSS: 'L1'
+  DROP_RATE : 0.4
+  SIGMOID: False
+  ATTENTION: True
+  BODY_PART: 'head'
+  KEY_FRAME_ATTENTION: False
+
+TRAIN:
+  NUM_FRAMES: 3
+  EPOCHS: 90
+  WARMUP_EPOCHS: 0
+  WEIGHT_DECAY: 1.0
+  BASE_LR: 1.25e-5
+  WARMUP_LR: 1.25e-8
+  MIN_LR: 1.25e-8
+
+SAVE_FREQ: 1
+PRINT_FREQ: 10

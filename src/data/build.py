@@ -14,6 +14,7 @@ import os
 import torch
 import numpy as np
 import torch.distributed as dist
+import torchvision
 from torchvision import datasets, transforms
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.data import Mixup
@@ -42,7 +43,13 @@ try:
 except:
     from timm.data.transforms import _pil_interp
 
+class AdjustContrast(object):
+    def __init__(self, contrast_factor):
+        self.contrast_factor = contrast_factor
 
+    def __call__(self, img):
+        return torchvision.transforms.functional.adjust_contrast(img, self.contrast_factor)
+    
 class MyCollate:
     def __init__(self):
         pass
@@ -147,7 +154,7 @@ def build_loader(config):
             dataset_val, 
             sampler = sampler_val,
             shuffle = False,
-            batch_size=config.DATA.BATCH_SIZE,
+            batch_size=1,
             num_workers=8,
             drop_last=True if config.TRAIN.AUTO_RESUME else False,)
     
@@ -183,19 +190,19 @@ def build_dataset(is_train, config):
             print(config.MODEL.TYPE)
             print('ddp: Video_Loader')
             dataset = Video_Loader(root = config.DATA.DATA_PATH, videos_path = videos_path,ann_path = ann_path, 
-                                   transform = transform, img_scaling = config.DATA.IMG_SCALING, num_frames = config.TRAIN.NUM_FRAMES)
+                                   transform = transform, img_scaling = config.DATA.IMG_SCALING, num_frames = config.TRAIN.NUM_FRAMES, img_size = config.DATA.IMG_SIZE)
         elif config.MODEL.TYPE == 'effnetv2':
             print('ddp: Fetal_frame')
             dataset = Fetal_frame(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform, img_scaling = config.DATA.IMG_SCALING)
         nb_classes = config.MODEL.NUM_CLASSES
-    if config.TRAIN.AUTO_RESUME == False:
+    if config.EVAL_MODE:
         if config.MODEL.TASK_TYPE == 'reg':
             print('regression: Fetal_frame_eval_reg')
             if config.MODEL.TYPE == 'effnetv2_key_frame' or config.MODEL.TYPE == 'swin-video':
                 print(config.MODEL.TYPE)
                 print('ddp: Video_Loader')
                 dataset = Eval_Video_Loader(root = config.DATA.DATA_PATH, ann_path = ann_path, 
-                                       transform = transform, img_scaling = config.DATA.IMG_SCALING, num_frames = config.TRAIN.NUM_FRAMES)
+                                       transform = transform, img_scaling = config.DATA.IMG_SCALING, num_frames = config.TRAIN.NUM_FRAMES, img_size = config.DATA.IMG_SIZE)
             else:
                 dataset = Fetal_frame_eval_reg(root = config.DATA.DATA_PATH, ann_path = ann_path, transform = transform)
                 nb_classes = config.MODEL.NUM_CLASSES
@@ -214,10 +221,9 @@ def build_transform(is_train, config, dataset_name):
         if is_train:
             if config.DATA.AUGM:
                             t = transforms.Compose([
-                            transforms.RandomRotation(degrees=(0, 5)),
-                            transforms.RandomVerticalFlip(p=0.5),
-                            transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.5),
-                            transforms.RandomAutocontrast(p=0.5),])
+                            transforms.RandomHorizontalFlip(p=0.5),
+                            transforms.RandomAffine(degrees=5, scale = (0.7, 1), fill = -0.7436),
+                            ])
             else:
                 t = None
                 #transforms.Normalize(mean=0.1354949, std=0.18222201)

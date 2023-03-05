@@ -4,9 +4,11 @@ warnings.filterwarnings("ignore")
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
-from torchvision.models import efficientnet_v2_l
+from torchvision.models import efficientnet_v2_l, efficientnet_v2_s, efficientnet_v2_m
 from .efficient_net_group_norm import effnetv2_m, effnetv2_l, effnetv2_xl
-    
+from .UniNet import UniNetB6
+from .metaformer_baselines import CA_former
+from .swin_transformer import SwinTransformer
 #from .cbam import CBAMBlock
 
 class SpatialAttention(torch.nn.Module):
@@ -30,14 +32,12 @@ class SpatialAttention(torch.nn.Module):
         if self.use_layer_norm:
             self.layer_norm = torch.nn.LayerNorm([self.n_channels, self.feature_map_size, self.feature_map_size])
     def forward(self, x):
-        
+     #   print('x in spatial attention', x.shape)
         attended_features = torch.matmul(self.softmax(torch.matmul(self.keys(x).view(x.size(0), self.n_channels, -1).permute(0, 2, 1), 
                                                                    self.queries(x).view(x.size(0), self.n_channels, -1))/self.n_channels**0.5), 
                                          self.values(x).view(x.size(0), self.n_channels, -1).permute(0, 2, 1)) # (batch_size, feature_map_size * feature_map_size, n_channels)
         attended_features = attended_features.permute(0, 2, 1).view(x.size(0), self.n_channels, self.feature_map_size, self.feature_map_size) # (batch_size, n_channels, feature_map_size, feature_map_size)
-        if self.use_gelu:
-            #print('spatial using gelu')
-            attended_features = self.gelu(attended_features)
+      #  print('attended_features', attended_features.shape)
         attended_features = self.refine(attended_features)
         if self.use_alpha:
             #print('spatial using alpha')
@@ -82,22 +82,19 @@ class KeyFrameAttention(torch.nn.Module):
         keys = self.keys(x) # (batch_size, n_frames, n_channels)
         #print('keys', keys.shape)
         queries = self.queries(x) # (batch_size, n_frames, n_channels)
-        #print('queries', queries)
+        #print('queries', queries.shape)
         values = self.values(x) # (batch_size, n_frames, n_channels)
-        #print('values', values)
+        #print('values', values.shape)
         matmul = torch.matmul(queries, keys.permute(0, 2, 1)).float() # (batch_size, n_channels, n_frames)
         #print('matmul', matmul.shape)
         if Mask is not None:
             matmul = matmul.masked_fill(Mask == 0, -1e20)
-            #print('matmul masked', matmul)
         #print('matmul shape', matmul.shape)
         softmax = self.softmax(matmul/(self.n_channels) ** 0.5) # (batch_size, n_channels, n_frames)
         attention_map = torch.matmul(values.permute(0, 2, 1), softmax) # (batch_size, n_channels, n_frames)
         #print('attention_map', attention_map.shape)
+        #print('attention_map', attention_map.shape)
         #print('attention_map', attention_map)
-        if self.use_gelu:
-            #print('kfa using gelu')
-            attention_map = self.gelu(attention_map)
         attended_features = self.refine(attention_map.permute(0, 2, 1)) # (batch_size, n_frames, n_channels)
         if self.use_skip_connection:
             #print('kfa using skip connection')
@@ -129,9 +126,10 @@ class KeyFrameAttention(torch.nn.Module):
 class EffnetV2_Key_Frame(torch.nn.Module):
     def __init__(self, out_features = 7, in_channels = 1, dropout = 0.4, use_sigmoid = False, 
                  use_attention = True, use_key_frame_attention = False,
-                 n_frames = 4, use_alpha = True, use_layer_norm = False, use_skip_connection = False, use_gelu = False, use_head = False):
+                 n_frames = 4, use_alpha = True, use_layer_norm = False, use_skip_connection = False, use_gelu = False, use_head = False, backbone = 'effnetv2'):
         super().__init__()
         
+        self.backbone = backbone
         self.use_head = use_head
         self.use_alpha = use_alpha
         self.use_layer_norm = use_layer_norm
@@ -144,10 +142,21 @@ class EffnetV2_Key_Frame(torch.nn.Module):
         self.dropout = dropout
         self.out_features = out_features
         self.in_channels = in_channels
-        self.model = efficientnet_v2_l(weights ='DEFAULT')
-        self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
-        self.model.avgpool = torch.nn.Identity()
-        self.model.classifier = torch.nn.Sequential(nn.Dropout(self.dropout), nn.Linear(1280, self.out_features))
+        if self.backbone == 'effnetv2':
+           # print('Using EffnetV2')
+            self.model = efficientnet_v2_l(weights ='DEFAULT')
+            self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+            self.model.avgpool = torch.nn.Identity()
+            self.model.classifier = torch.nn.Sequential(nn.Dropout(self.dropout), nn.Linear(1280, self.out_features))
+        elif self.backbone == 'uninet':
+         #   print('Using UniNet')
+            self.model = UniNetB6()
+        elif self.backbone == 'caformer':
+         #   print('Using CAFormer')
+            self.model = CA_former()
+        elif self.backbone == 'swin_transformer':
+         #   print('Using Swin Transformer')
+            self.model = SwinTransformer()
         self.sigmoid = torch.nn.Sigmoid()
         if self.use_head:
             self.head = torch.nn.Linear(self.n_frames, self.out_features)
@@ -169,11 +178,7 @@ class EffnetV2_Key_Frame(torch.nn.Module):
                                                       use_gelu = self.use_gelu)
         
     def features_padding(self, features, max_length, split_sizes):
-        padded_output = []
-        for i, feature in enumerate(features):
-            padding_length = max_length - split_sizes[i]
-            padded_seq = torch.nn.functional.pad(feature, (0, padding_length, 0, 0, 0, 0), mode='constant', value=0)
-            padded_output.append(padded_seq)
+        padded_output = [torch.nn.functional.pad(feature, (0, max_length - split_sizes[i], 0, 0, 0, 0), mode='constant', value=0) for i, feature in enumerate(features)]
         padded_output = torch.stack(padded_output)
         return padded_output
     
@@ -183,7 +188,7 @@ class EffnetV2_Key_Frame(torch.nn.Module):
         padded_seq_len = padded_seq.size(-1)
         batch_len = padded_seq.size(0)
         # Define the mask tensor
-        mask = torch.zeros((batch_len, padded_seq_len, padded_seq_len), dtype=torch.float32)
+        mask = torch.zeros((batch_len, padded_seq_len, padded_seq_len), dtype=torch.float32) 
         
         # Set the non-padding elements to 1's
         for i in range(batch_len):
@@ -207,14 +212,24 @@ class EffnetV2_Key_Frame(torch.nn.Module):
 
         #print('shape of x', x.shape)
         x = torch.cat(x)
-        features = self.model.features(x)
+      #  print('shape of before RFE x', x.shape)
+        if self.backbone == 'effnetv2':
+            features = self.model.features(x)
+        elif self.backbone == 'uninet':
+            features = self.model.forward_features(x).unsqueeze(0).permute(0, 2, 1)
+        elif self.backbone == 'caformer' or self.backbone == 'swin_transformer':
+            features = self.model.forward(x).unsqueeze(0).permute(0, 2, 1)
+        elif self.backbone == 'swin_transformer':
+            self.model.forward(x).unsqueeze(0).permute(0, 2, 1)
+            
         #features = checkpoint_sequential(self.model.features, segments=len(self.model.features), input=x)
         if self.use_attention:
             features = self.spatial_attention(features)
         
         #print('features shape', features.shape)
-        features = self.avgpool(features).squeeze(-1).permute(2, 1, 0)
-        #print('features shape', features.shape)
+        if self.backbone == 'effnetv2':
+            features = self.avgpool(features).squeeze(-1).permute(2, 1, 0)
+      #  print('features shape', features.shape)
         tensor_list = torch.split(features, split_size_or_sections = org_seq_len, dim=2)
         
         features_padded = self.features_padding(tensor_list, self.n_frames, org_seq_len)
@@ -228,13 +243,23 @@ class EffnetV2_Key_Frame(torch.nn.Module):
         if self.use_key_frame_attention:
           #  print('Using Key Frame Attention')
             x = self.key_frame_attention(features_padded.permute(0, 2, 1), Mask = mask)
-            x = self.model.classifier(x)
+            if self.backbone == 'caformer':
+                x = self.model.model.head(x)
+            elif self.backbone == 'swin_transformer':
+                x = self.model.head(x)
+            else:
+                x = self.model.classifier(x)
         else:
           #  print('Not Using Key Frame Attention')
             #print(features_padded.shape)
             #features_padded = features_padded.mean(dim = 1)
             features_padded = features_padded.permute(0, 2, 1)
-            x = self.model.classifier(features_padded)
+            if self.backbone == 'caformer':
+                x = self.model.model.head(features_padded)
+            elif self.backbone == 'swin_transformer':
+                x = self.model.head(features_padded)
+            else:
+                x = self.model.classifier(features_padded)
             #print('x shape in else', x.shape)
             #print(x.shape)
         if self.use_sigmoid:
@@ -244,7 +269,7 @@ class EffnetV2_Key_Frame(torch.nn.Module):
             x = x.permute(0, 2, 1).squeeze(1)
             x = self.head(x)
         else:
-            x = x.mean(dim = 1)
+            x = torch.stack([batch_element[:org_seq_len[i], :].mean(dim=0) for i, batch_element in enumerate(x)])
         return x
     
 
@@ -260,8 +285,8 @@ class EffnetV2_L(torch.nn.Module):
         self.dropout = dropout
         self.out_features = out_features
         self.in_channels = in_channels
-        self.model = efficientnet_v2_l(weights = 'EfficientNet_V2_L_Weights.IMAGENET1K_V1')
-        self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+        self.model = efficientnet_v2_s(weights = 'EfficientNet_V2_S_Weights.IMAGENET1K_V1')
+        self.model.features[0] = torch.nn.Conv2d(self.in_channels, 24, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
         self.model.avgpool = torch.nn.Identity()
         self.model.classifier = torch.nn.Sequential(nn.Dropout(self.dropout), nn.Linear(1280, self.out_features))
         self.sigmoid = torch.nn.Sigmoid()
@@ -353,7 +378,7 @@ class EffnetV2_L_meta(torch.nn.Module):
         self.dropout = dropout
         self.out_features = out_features
         self.in_channels = in_channels
-        self.model = efficientnet_v2_l(weights = 'EfficientNet_V2_L_Weights.IMAGENET1K_V1')
+        self.model = efficientnet_v2_s(weights = 'EfficientNet_V2_s_Weights.IMAGENET1K_V1')
         self.model.features[0] = torch.nn.Conv2d(self.in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
         self.model.classifier = torch.nn.Identity()
         #self.model.classifier = torch.nn.Sequential(nn.Dropout(0.4), nn.Linear(1280, self.out_features))
@@ -378,8 +403,15 @@ class EffnetV2_L_meta(torch.nn.Module):
         out = self.classifier(features)
         return out
     
-# use_layer_norm, use_skip_connection, use_gelu    
-# model = EffnetV2_Key_Frame(out_features = 1, in_channels = 1, dropout = 0.4, use_key_frame_attention=True, use_layer_norm = True, use_skip_connection = False, use_gelu = True)
+# model = EffnetV2_L(out_features = 2, in_channels = 1, dropout = 0.2)
+# test_tensor = torch.rand(1, 1, 512, 512)
+# print(model.count_params())
+# print(model(test_tensor).shape)
+
+# model = EffnetV2_Key_Frame(out_features = 1, in_channels = 1, dropout = 0.4, 
+#                            use_key_frame_attention=True, use_layer_norm = False,
+#                            use_skip_connection = True, use_gelu = False, use_attention = True,
+#                            backbone = 'effnetv2')
 # split_sizes = [4, 2, 3, 4]
 # org_batch = [torch.rand(i, 1, 512, 512) for i in split_sizes]
 

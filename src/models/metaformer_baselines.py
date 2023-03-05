@@ -1523,7 +1523,7 @@ def caformer_b36_in21k(pretrained=False, **kwargs):
 
 
 class CA_former(torch.nn.Module):
-    def __init__(self, out_features = 7, in_channels = 1):
+    def __init__(self, out_features = 1, in_channels = 1):
         super().__init__()
         
         
@@ -1533,7 +1533,7 @@ class CA_former(torch.nn.Module):
         self.model = caformer_b36_in21ft1k(pretrained=True)
         self.model.downsample_layers[0].conv = torch.nn.Conv2d(1, 128, kernel_size=(7, 7), stride=(4, 4), padding=(2, 2))
         #self.model.downsample_layers.conv = torch.nn.Conv2d(1, 128, kernel_size=(7, 7), stride=(4, 4), padding=(2, 2))
-        self.model.head = MlpHead(768, 7)
+        self.model.head = MlpHead(768, 1)
         #self.classifier = torch.nn.Sequential(nn.Dropout(0.4), nn.Linear(1280, self.out_features))
         
         
@@ -1544,4 +1544,10 @@ class CA_former(torch.nn.Module):
         
     def forward(self, x):
         
-        return self.model(x)
+        return self.model.forward_features(x)
+    
+# test_tensor = torch.rand(1, 1, 384, 384)
+# model = CA_former()
+
+# print(model.count_params())
+# print(model(test_tensor).shape)

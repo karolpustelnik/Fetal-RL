@@ -118,7 +118,7 @@ class Fetal_frame_eval_cls(data.Dataset):
     
     
 class Fetal_frame_eval_reg(data.Dataset):
-    def __init__(self, root, ann_path, transform=None, target_transform=None):
+    def __init__(self, root, ann_path, transform=None, target_transform=None, img_size = 512):
 
         self.data_path = root
         self.ann_path = ann_path
@@ -323,8 +323,9 @@ class Fetal_frame(data.Dataset):
                       
     
 class Video_Loader(data.Dataset):
-    def __init__(self, root, videos_path, ann_path, transform=None, target_transform=None, img_scaling = False, num_frames = 4):
+    def __init__(self, root, videos_path, ann_path, transform=None, target_transform=None, img_scaling = False, num_frames = 4, img_size = 512):
         
+        self.img_size = img_size
         self.num_frames = num_frames
         self.transform = transform
         self.data_path = root
@@ -385,7 +386,7 @@ class Video_Loader(data.Dataset):
             t = transforms.Compose([transforms.ToTensor(),
             transforms.Resize((450, 600)),
             transforms.Pad((0, 0, 0, 150), fill = 0, padding_mode = 'constant'),
-            transforms.Resize((512, 512)),
+            transforms.Resize((self.img_size, self.img_size)),
             transforms.Normalize(mean=0.1354949, std=0.18222201)])
             images = t(images)
         if self.transform is not None:
@@ -423,8 +424,9 @@ class Video_Loader(data.Dataset):
 
 
 class Eval_Video_Loader(data.Dataset):
-    def __init__(self, root, ann_path, transform=None, target_transform=None, img_scaling = False, num_frames = 4):
+    def __init__(self, root, ann_path, transform=None, target_transform=None, img_scaling = False, num_frames = 4, img_size = 512):
         
+        self.img_size = img_size
         self.num_frames = num_frames
         self.transform = transform
         self.data_path = root
@@ -485,7 +487,7 @@ class Eval_Video_Loader(data.Dataset):
             t = transforms.Compose([transforms.ToTensor(),
             transforms.Resize((450, 600)),
             transforms.Pad((0, 0, 0, 150), fill = 0, padding_mode = 'constant'),
-            transforms.Resize((512, 512)),
+            transforms.Resize((self.img_size, self.img_size)),
             transforms.Normalize(mean=0.1354949, std=0.18222201)])
             images = t(images)
         if self.transform is not None:
