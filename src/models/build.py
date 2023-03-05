@@ -7,7 +7,7 @@ from .vit import ViT
 from .effnetv2 import EffnetV2_L_meta, EffnetV2_Key_Frame, EffnetV2_L
 from .efficient_ete import EffnetEtE
 from .metaformer_baselines import CA_former
-from .D_models.swin_video import SwinTransformer3D
+#from .D_models.swin_video import SwinTransformer3D
     
 def build_model(config):
     model_type = config.MODEL.TYPE
